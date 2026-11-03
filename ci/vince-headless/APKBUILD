@@ -47,6 +47,8 @@ source="
 	vince-aria2.initd
 	vince-ariang.initd
 	vince-ttyd.initd
+	vince-led.initd
+	vince-led
 	vince-bt
 	AutoSIM.nmconnection
 	Hotspot.nmconnection
@@ -64,10 +66,11 @@ build() {
 }
 
 package() {
-	for s in setup pulse bluetooth aria2 ariang ttyd; do
+	for s in setup pulse bluetooth aria2 ariang ttyd led; do
 		install -Dm755 "$srcdir"/vince-$s.initd "$pkgdir"/etc/init.d/vince-$s
 	done
 	install -Dm755 "$srcdir"/vince-bt "$pkgdir"/usr/libexec/vince-bt
+install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \
@@ -87,6 +90,7 @@ package() {
 
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
+mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
 	for s in vince-setup dbus networkmanager modemmanager wpa_supplicant bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
 	         vince-ttyd zram-init; do

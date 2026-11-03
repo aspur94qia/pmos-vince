@@ -47,11 +47,6 @@ wifi_setup() {
 start() {
 	ebegin "Starting vince-setup"
 
-	for led in /sys/class/leds/*; do
-		[ -d "$led" ] || continue
-		echo heartbeat > "$led/trigger" 2>/dev/null
-		echo 255 > "$led/brightness" 2>/dev/null
-	done
 
 	mkdir -p /mnt/modem /mnt/persist /lib/firmware/wlan/prima
 	if dev="$(part_dev modem)"; then

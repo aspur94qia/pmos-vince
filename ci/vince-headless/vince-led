@@ -1,0 +1,28 @@
+#!/bin/sh
+# LED putih vince: 1 kedip=boot, 2 kedip=proses sistem, kilat 1x=WiFi sudah hidup
+MODE=status   # ganti ke "off" untuk mematikan LED
+L=/sys/class/leds
+LED=""
+for d in "$L"/*white* "$L"/*; do
+	[ -d "$d" ] || continue
+	case "${d##*/}" in *backlight*|*wled*|*lcd*|*button*|*torch*|*flash*|*vibrator*) continue;; esac
+	LED="$d"; break
+done
+[ -n "$LED" ] || exit 0
+MAX="$(cat "$LED/max_brightness" 2>/dev/null || echo 255)"
+echo none > "$LED/trigger" 2>/dev/null
+on() { echo "$MAX" > "$LED/brightness" 2>/dev/null; }
+off() { echo 0 > "$LED/brightness" 2>/dev/null; }
+nap() { sleep "$1" 2>/dev/null || sleep 1; }
+blink() { on; nap "$1"; off; nap "$2"; }
+[ "$MODE" = off ] && { off; exit 0; }
+while true; do
+	if ! pidof NetworkManager >/dev/null 2>&1; then
+		blink 0.4 1.6
+	elif nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^wifi:connected'; then
+		blink 0.05 2.5
+	else
+		blink 0.2 0.25
+		blink 0.2 1.4
+	fi
+done

@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+
+description="LED putih: 1 kedip boot, 2 kedip proses, kilat 1x WiFi hidup"
+
+command=/usr/libexec/vince-led
+command_background=true
+pidfile=/run/vince-led.pid
+
+depend() {
+	need localmount
+	before vince-setup networkmanager
+}
