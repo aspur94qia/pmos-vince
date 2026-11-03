@@ -20,6 +20,9 @@ depends="
 	msm-modem-uim-selection
 	iw
 	bluez
+	python3
+	py3-dbus
+	py3-gobject3
 	pulseaudio
 	pulseaudio-bluez
 	alsa-utils
