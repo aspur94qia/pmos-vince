@@ -4,6 +4,7 @@ uuid=c9398d5a-1b2c-4d3e-9f0a-123456789abc
 type=wifi
 interface-name=wlan0
 autoconnect=true
+autoconnect-retries=0
 autoconnect-priority=10
 
 [wifi]
@@ -11,6 +12,7 @@ mode=ap
 band=bg
 channel=6
 ssid=pmOS-Vince
+powersave=2
 
 [wifi-security]
 key-mgmt=wpa-psk

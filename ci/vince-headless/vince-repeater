@@ -51,7 +51,7 @@ start_repeater() {
 	nmcli con delete Upstream >/dev/null 2>&1
 	nmcli con add type wifi ifname wlan0 con-name Upstream ssid "$SSID" \
 		802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" \
-		connection.autoconnect no ipv4.method auto ipv6.method ignore >/dev/null 2>&1
+		connection.autoconnect no connection.autoconnect-retries 0 802-11-wireless.powersave 2 ipv4.method auto ipv6.method ignore >/dev/null 2>&1
 	nmcli -w 40 con up Upstream >>"$LOG" 2>&1 || { log "gagal sambung ke sumber (password salah / sinyal lemah / bukan 2.4GHz?)"; return 1; }
 	CH="$(ch_of "$(cur_freq)")" || { log "sumber bukan 2.4GHz atau channel tak terbaca"; return 1; }
 	log "sumber tersambung di channel $CH"
@@ -82,7 +82,7 @@ while true; do
 		if [ "$fails" -ge 3 ]; then
 			log "menyerah: kembali ke hotspot saja (lihat kemampuan chip di atas)"
 			hotspot_only
-			exit 0
+			sleep 900; fails=0
 		fi
 		sleep 10
 	fi

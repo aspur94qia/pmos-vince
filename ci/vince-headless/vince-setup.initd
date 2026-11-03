@@ -49,6 +49,7 @@ wifi_setup() {
 		return 0
 	fi
 	rfkill unblock wifi 2>/dev/null
+iw dev wlan0 set power_save off 2>/dev/null
 
 	if [ -d /sys/class/net/wlan1 ]; then
 		up_if=wlan1
