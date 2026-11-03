@@ -15,18 +15,8 @@ on() { echo "$MAX" > "$LED/brightness" 2>/dev/null; }
 off() { echo 0 > "$LED/brightness" 2>/dev/null; }
 nap() { sleep "$1" 2>/dev/null || sleep 1; }
 blink() { on; nap "$1"; off; nap "$2"; }
-charging() {
-	for b in /sys/class/power_supply/*; do
-		[ "$(cat "$b/type" 2>/dev/null)" = Battery ] || continue
-		[ "$(cat "$b/present" 2>/dev/null || echo 1)" = 0 ] && continue
-		[ "$(cat "$b/status" 2>/dev/null)" = Charging ] || continue
-		[ "$(cat "$b/capacity" 2>/dev/null || echo 0)" -lt 80 ] && return 0
-	done
-	return 1
-}
 [ "$MODE" = off ] && { off; exit 0; }
 while true; do
-	charging && { blink 0.8 0.8; blink 0.8 0.8; blink 0.8 1.6; continue; }
 	if ! pidof NetworkManager >/dev/null 2>&1; then
 		blink 0.4 1.6
 	elif [ ! -d /sys/class/net/wlan0 ]; then
