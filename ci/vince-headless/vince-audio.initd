@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="Audio: speaker/headset otomatis + EQ untuk speaker"
+
+command=/usr/libexec/vince-audio
+command_background=true
+pidfile=/run/vince-audio.pid
+
+depend() {
+	need vince-pulse
+}

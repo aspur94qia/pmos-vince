@@ -5,6 +5,7 @@ load-module module-device-restore
 load-module module-stream-restore
 load-module module-card-restore
 load-module module-udev-detect
+load-module module-switch-on-port-available
 load-module module-native-protocol-unix auth-anonymous=1
 load-module module-default-device-restore
 load-module module-rescue-streams

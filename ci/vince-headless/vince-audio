@@ -1,0 +1,66 @@
+#!/bin/sh
+export PULSE_SERVER=unix:/var/run/pulse/native
+export LC_ALL=C
+LOG=/var/log/vince-audio.log
+EQ_PLUGIN=/usr/lib/ladspa/mbeq_1197.so
+EQ_SPEAKER="6,6,5,4,2,0,0,0,0,1,2,4,5,6,4"
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+until pactl info >/dev/null 2>&1; do sleep 2; done
+log "pulseaudio siap"
+
+phys_sink() { pactl list short sinks | awk '$2 !~ /bluez|null|vince_eq/ {print $2; exit}'; }
+
+ports_of() {
+	pactl list sinks | awk -v s="$1" '
+		$1=="Name:" { cur=$2; inp=0 }
+		cur==s && /^\tPorts:/ { inp=1; next }
+		cur==s && /^\tActive Port:/ { inp=0 }
+		cur==s && inp {
+			line=$0; sub(/^\t+/, "", line)
+			name=line; sub(/: .*/, "", name)
+			st="unknown"
+			if (line ~ /not available/) st="no"
+			else if (line ~ /availability unknown/) st="unknown"
+			else if (line ~ /available/) st="yes"
+			print name "|" st
+		}'
+}
+
+EQMOD=""
+eq_unload() {
+	[ -n "$EQMOD" ] && pactl unload-module "$EQMOD" 2>/dev/null
+	EQMOD=""
+}
+eq_load() {
+	[ -e "$EQ_PLUGIN" ] || return 1
+	[ -n "$EQMOD" ] && return 0
+	EQMOD="$(pactl load-module module-ladspa-sink sink_name=vince_eq master="$1" \
+		plugin=mbeq_1197 label=mbeq control="$EQ_SPEAKER" 2>>"$LOG")" || { EQMOD=""; return 1; }
+	[ -n "$EQMOD" ]
+}
+
+LAST=""
+while true; do
+	sink="$(phys_sink)"
+	if [ -n "$sink" ]; then
+		P="$(ports_of "$sink")"
+		hs="$(echo "$P" | awk -F'|' 'tolower($1) ~ /headphone|headset/ && $2=="yes" {print $1; exit}')"
+		sp="$(echo "$P" | awk -F'|' 'tolower($1) ~ /speaker/ {print $1; exit}')"
+		if [ -n "$hs" ]; then mode=headset; want="$hs"; else mode=speaker; want="$sp"; fi
+		state="$sink|$mode|$want"
+		if [ "$state" != "$LAST" ]; then
+			[ -n "$want" ] && pactl set-sink-port "$sink" "$want" 2>>"$LOG"
+			if [ "$mode" = speaker ] && eq_load "$sink"; then
+				pactl set-default-sink vince_eq
+			else
+				eq_unload
+				pactl set-default-sink "$sink"
+			fi
+			log "mode=$mode port=$want sink=$sink eq=${EQMOD:-off}"
+			LAST="$state"
+		fi
+	fi
+	sleep 3
+done
