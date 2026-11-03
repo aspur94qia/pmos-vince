@@ -1,4 +1,4 @@
-# Maintainer: local
+# Maintainer: Local <local@localhost>
 pkgname=vince-headless
 pkgver=2.0
 pkgrel=0
@@ -18,7 +18,7 @@ depends="
 	iw
 	bluez
 	pulseaudio
-	pulseaudio-bluetooth
+	pulseaudio-bluez
 	alsa-utils
 	alsa-ucm-conf
 	nftables
@@ -46,7 +46,6 @@ depends="
 	ethtool
 "
 source="
-	vince-headless.post-install
 	vince-setup.initd
 	vince-pulse.initd
 	vince-bluetooth.initd
