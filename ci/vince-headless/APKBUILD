@@ -12,6 +12,7 @@ install="$pkgname.post-install"
 depends="
 	networkmanager
 	networkmanager-cli
+	networkmanager-tui
 	networkmanager-wifi
 	networkmanager-wwan
 	modemmanager
@@ -26,14 +27,9 @@ depends="
 	samba
 	aria2
 	busybox-extras
-	cockpit
-	cockpit-bridge
-	cockpit-networkmanager
-	cockpit-storaged
 	ttyd
 	zram-init
 	e2fsprogs
-	fdisk
 	lsblk
 	usbutils
 	htop
@@ -91,9 +87,9 @@ package() {
 
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
-	for s in vince-setup dbus networkmanager modemmanager bluetooth \
+	for s in vince-setup dbus networkmanager modemmanager wpa_supplicant bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
-	         vince-ttyd cockpit zram-init; do
+	         vince-ttyd zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"
 	done
 }

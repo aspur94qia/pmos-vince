@@ -69,7 +69,7 @@ rm -rf /tmp/pmos-export
 pmbootstrap -y export /tmp/pmos-export
 
 mkdir -p output
-sudo cp -L /tmp/pmos-export/* output/
+sudo cp -rL /tmp/pmos-export/* output/
 sudo chown -R "$(id -u):$(id -g)" output
 ls -lh output
 [ -n "$(ls -A output)" ] || { echo "ERROR: output kosong" >&2; exit 1; }
