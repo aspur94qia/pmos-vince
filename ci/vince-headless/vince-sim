@@ -1,0 +1,74 @@
+#!/bin/sh
+# Pantau jaringan SIM: catat diagnosis ke share, coba sambung ulang, APN manual dari apn.txt
+LOG=/home/user/share/vince-sim.log
+APNF=/home/user/share/apn.txt
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+mkdir -p /home/user/share
+[ -e "$APNF" ] || printf '%s\n%s\n%s\n' "OTOMATIS" "" "" > "$APNF"
+touch "$LOG"
+[ "$(wc -c < "$LOG")" -gt 200000 ] && { tail -n 300 "$LOG" > "$LOG.tmp"; mv "$LOG.tmp" "$LOG"; }
+chown user:user "$APNF" "$LOG" 2>/dev/null
+chmod 600 "$APNF"
+
+modem_id() { mmcli -L 2>/dev/null | sed -n 's|.*/Modem/\([0-9]*\).*|\1|p' | head -n1; }
+kv() { mmcli -m "$1" -K 2>/dev/null | sed -n "s/^$2 *: *//p" | head -n1; }
+
+apply_apn() {
+	A="$(sed -n 1p "$APNF" | tr -d '\r')"
+	U="$(sed -n 2p "$APNF" | tr -d '\r')"
+	P="$(sed -n 3p "$APNF" | tr -d '\r')"
+	case "$A" in
+		""|OTOMATIS*)
+			nmcli con modify AutoSIM gsm.auto-config yes gsm.apn "" gsm.username "" gsm.password "" >/dev/null 2>&1
+			log "APN: otomatis (provider-info)" ;;
+		*)
+			nmcli con modify AutoSIM gsm.auto-config no gsm.apn "$A" gsm.username "$U" gsm.password "$P" >/dev/null 2>&1
+			log "APN manual: $A" ;;
+	esac
+}
+
+log "=== boot: menunggu modem ==="
+M=""; i=0
+while true; do
+	M="$(modem_id)"
+	[ -n "$M" ] && break
+	i=$((i + 1))
+	if [ "$i" = 6 ]; then
+		log "modem belum muncul setelah ~3 menit. status layanan dan dmesg:"
+		rc-status 2>&1 | grep -Ei 'rmtfs|qrtr|modem|uim' >> "$LOG"
+		dmesg 2>/dev/null | grep -Ei 'modem|rmtfs|qrtr|remoteproc|mss' | tail -n 30 >> "$LOG"
+	fi
+	sleep 30
+done
+log "modem ditemukan: id $M"
+
+LASTSUM=""; tries=0
+while true; do
+	SUM="$(cksum < "$APNF")"
+	if [ "$SUM" != "$LASTSUM" ]; then
+		apply_apn
+		LASTSUM="$SUM"
+		nmcli con down AutoSIM >/dev/null 2>&1
+	fi
+	M="$(modem_id)"
+	[ -n "$M" ] || { log "modem hilang"; sleep 30; continue; }
+
+	if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx AutoSIM; then
+		[ "$tries" != 0 ] && log "AutoSIM AKTIF: $(ip -br addr 2>/dev/null | grep -Ei 'wwan|rmnet|ppp|bam' | head -n1)"
+		tries=0
+	else
+		tries=$((tries + 1))
+		log "state=$(kv "$M" modem.generic.state) sim=$(kv "$M" modem.generic.sim) operator=$(kv "$M" modem.3gpp.operator-name) kode=$(kv "$M" modem.3gpp.operator-code) reg=$(kv "$M" modem.3gpp.registration-state) sinyal=$(kv "$M" modem.generic.signal-quality.value)"
+		case "$(kv "$M" modem.generic.sim)" in
+			""|--)
+				log "SIM tidak terdeteksi, pilih slot ulang"
+				[ -x /etc/init.d/msm-modem-uim-selection ] && rc-service msm-modem-uim-selection restart >>"$LOG" 2>&1 ;;
+		esac
+		if nmcli -w 60 con up AutoSIM >>"$LOG" 2>&1; then log "AutoSIM naik"; else log "AutoSIM gagal naik (percobaan $tries)"; fi
+		if [ "$tries" = 2 ]; then
+			{ echo "--- mmcli ---"; mmcli -m "$M"; echo "--- nmcli device ---"; nmcli device; } >> "$LOG" 2>&1
+		fi
+	fi
+	sleep 60
+done

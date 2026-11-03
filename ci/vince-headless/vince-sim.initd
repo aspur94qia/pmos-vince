@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="Pantau jaringan SIM: log diagnosis, sambung ulang, APN manual"
+
+command=/usr/libexec/vince-sim
+command_background=true
+pidfile=/run/vince-sim.pid
+
+depend() {
+	need modemmanager networkmanager vince-setup
+}

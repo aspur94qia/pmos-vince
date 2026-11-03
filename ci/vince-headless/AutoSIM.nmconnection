@@ -3,6 +3,7 @@ id=AutoSIM
 uuid=a1b2c3d4-e5f6-4a8b-9c0d-1234567890ab
 type=gsm
 autoconnect=true
+autoconnect-retries=0
 autoconnect-priority=1
 
 [gsm]
@@ -12,4 +13,4 @@ auto-config=true
 method=auto
 
 [ipv6]
-method=auto
+method=ignore
