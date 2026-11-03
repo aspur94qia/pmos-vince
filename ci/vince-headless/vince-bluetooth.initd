@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+description="Bluetooth receiver headless: nyala, discoverable, auto-pair"
+
+command=/usr/libexec/vince-bt
+command_background=true
+pidfile=/run/vince-bluetooth.pid
+
+depend() {
+	need bluetooth dbus
+	after vince-pulse
+}
+
+stop_post() {
+	pkill -f 'bluetoothctl --agent' 2>/dev/null
+	return 0
+}

@@ -1,0 +1,34 @@
+#!/bin/sh
+# Bluetooth receiver tanpa layar: nyalakan, discoverable terus, terima pairing otomatis
+BT_NAME="Vince Speaker"
+
+i=0
+until bluetoothctl show 2>/dev/null | grep -q "Controller"; do
+	i=$((i + 1))
+	[ "$i" -gt 60 ] && exit 1
+	sleep 2
+done
+
+rfkill unblock bluetooth 2>/dev/null
+
+# agent "NoInputNoOutput": pairing tanpa PIN, tetap hidup selama layanan jalan
+tail -f /dev/null | bluetoothctl --agent NoInputNoOutput >/dev/null 2>&1 &
+sleep 2
+
+bluetoothctl system-alias "$BT_NAME" >/dev/null 2>&1
+bluetoothctl discoverable-timeout 0 >/dev/null 2>&1
+bluetoothctl pairable-timeout 0 >/dev/null 2>&1
+
+while true; do
+	info="$(bluetoothctl show 2>/dev/null)"
+	echo "$info" | grep -q "Powered: yes" || bluetoothctl power on >/dev/null 2>&1
+	echo "$info" | grep -q "Discoverable: yes" || bluetoothctl discoverable on >/dev/null 2>&1
+	echo "$info" | grep -q "Pairable: yes" || bluetoothctl pairable on >/dev/null 2>&1
+
+	bluetoothctl devices 2>/dev/null | while read -r _ mac _; do
+		[ -n "$mac" ] || continue
+		bluetoothctl info "$mac" 2>/dev/null | grep -q "Trusted: yes" \
+			|| bluetoothctl trust "$mac" >/dev/null 2>&1
+	done
+	sleep 5
+done

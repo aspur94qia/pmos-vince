@@ -1,0 +1,4 @@
+#!/bin/sh
+addgroup pulse audio 2>/dev/null || true
+addgroup pulse bluetooth 2>/dev/null || true
+exit 0

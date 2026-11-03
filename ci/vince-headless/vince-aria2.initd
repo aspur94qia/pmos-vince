@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+description="aria2 RPC (port 6800)"
+
+command=/usr/bin/aria2c
+command_args="--conf-path=/etc/vince/aria2.conf"
+command_user="user:user"
+command_background=true
+pidfile=/run/vince-aria2.pid
+
+depend() {
+	need vince-setup
+	use net
+}
+
+start_pre() {
+	touch /var/lib/aria2/aria2.session
+	chown user:user /var/lib/aria2/aria2.session /etc/vince/aria2.conf
+}

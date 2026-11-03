@@ -1,0 +1,13 @@
+#!/usr/bin/pulseaudio -nF
+# PulseAudio system mode: output ke ALSA, Bluetooth A2DP diterima sebagai input lalu diteruskan ke output
+.fail
+load-module module-device-restore
+load-module module-stream-restore
+load-module module-card-restore
+load-module module-udev-detect
+load-module module-native-protocol-unix auth-anonymous=1
+load-module module-default-device-restore
+load-module module-rescue-streams
+load-module module-always-sink
+load-module module-bluetooth-policy
+load-module module-bluetooth-discover

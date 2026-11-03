@@ -1,0 +1,103 @@
+# Maintainer: local
+pkgname=vince-headless
+pkgver=2.0
+pkgrel=0
+pkgdesc="Headless server vince: BT receiver, hotspot/repeater, Samba, aria2, ttyd, Cockpit"
+url="https://postmarketos.org"
+arch="noarch"
+license="MIT"
+options="!check"
+builddir="$srcdir"
+install="$pkgname.post-install"
+depends="
+	networkmanager
+	networkmanager-cli
+	networkmanager-wifi
+	networkmanager-wwan
+	modemmanager
+	iw
+	bluez
+	pulseaudio
+	pulseaudio-bluetooth
+	alsa-utils
+	alsa-ucm-conf
+	nftables
+	dbus
+	sudo
+	samba
+	aria2
+	busybox-extras
+	cockpit
+	cockpit-bridge
+	cockpit-networkmanager
+	cockpit-storaged
+	ttyd
+	zram-init
+	e2fsprogs
+	fdisk
+	lsblk
+	usbutils
+	htop
+	curl
+	wget
+	bash
+	nano
+	iperf3
+	ethtool
+"
+source="
+	vince-headless.post-install
+	vince-setup.initd
+	vince-pulse.initd
+	vince-bluetooth.initd
+	vince-aria2.initd
+	vince-ariang.initd
+	vince-ttyd.initd
+	vince-bt
+	AutoSIM.nmconnection
+	Hotspot.nmconnection
+	Upstream.nmconnection
+	smb.conf
+	smb-pass
+	aria2.conf
+	pulse-system.pa
+	vince-pulse-bluetooth.conf
+	ariang.tar.gz
+"
+
+build() {
+	:
+}
+
+package() {
+	for s in setup pulse bluetooth aria2 ariang ttyd; do
+		install -Dm755 "$srcdir"/vince-$s.initd "$pkgdir"/etc/init.d/vince-$s
+	done
+	install -Dm755 "$srcdir"/vince-bt "$pkgdir"/usr/libexec/vince-bt
+
+	for c in AutoSIM Hotspot Upstream; do
+		install -Dm600 "$srcdir"/$c.nmconnection \
+			"$pkgdir"/etc/NetworkManager/system-connections/$c.nmconnection
+	done
+
+	install -Dm644 "$srcdir"/smb.conf "$pkgdir"/usr/share/vince/smb.conf
+	install -Dm644 "$srcdir"/pulse-system.pa "$pkgdir"/usr/share/vince/pulse-system.pa
+	install -Dm600 "$srcdir"/smb-pass "$pkgdir"/etc/vince/smb-pass
+	install -Dm600 "$srcdir"/aria2.conf "$pkgdir"/etc/vince/aria2.conf
+	install -Dm644 "$srcdir"/vince-pulse-bluetooth.conf \
+		"$pkgdir"/etc/dbus-1/system.d/vince-pulse-bluetooth.conf
+
+	mkdir -p "$pkgdir"/usr/share/vince
+	cp -r "$srcdir"/ariang "$pkgdir"/usr/share/vince/ariang
+
+	printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$srcdir"/vince-wheel
+	install -Dm440 "$srcdir"/vince-wheel "$pkgdir"/etc/sudoers.d/vince-wheel
+
+	# layanan yang otomatis nyala saat boot
+	mkdir -p "$pkgdir"/etc/runlevels/default
+	for s in vince-setup dbus networkmanager modemmanager bluetooth \
+	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
+	         vince-ttyd cockpit zram-init; do
+		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"
+	done
+}

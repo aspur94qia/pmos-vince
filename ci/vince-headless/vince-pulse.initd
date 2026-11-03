@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+description="PulseAudio (system mode) untuk Bluetooth receiver"
+
+command=/usr/bin/pulseaudio
+command_args="--system --daemonize=no --disallow-exit --exit-idle-time=-1 --realtime=no --high-priority=no --log-target=syslog -n -F /usr/share/vince/pulse-system.pa"
+command_background=true
+pidfile=/run/vince-pulse.pid
+
+depend() {
+	need dbus
+	after bluetooth vince-setup
+}

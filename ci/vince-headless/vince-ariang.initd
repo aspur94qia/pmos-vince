@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+
+description="AriaNg web UI (port 6801)"
+
+command=/bin/busybox-extras
+command_args="httpd -f -p 6801 -h /usr/share/vince/ariang"
+command_background=true
+pidfile=/run/vince-ariang.pid
+
+depend() {
+	use net
+}

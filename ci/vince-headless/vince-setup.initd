@@ -1,0 +1,99 @@
+#!/sbin/openrc-run
+
+description="Vince: LED, firmware, TTL, interface WiFi (hotspot/repeater), Samba"
+
+depend() {
+	need localmount
+	before networkmanager modemmanager bluetooth samba
+}
+
+part_dev() {
+	for u in /sys/class/block/mmcblk0p*/uevent; do
+		if grep -q "^PARTNAME=$1\$" "$u" 2>/dev/null; then
+			echo "/dev/$(basename "$(dirname "$u")")"
+			return 0
+		fi
+	done
+	return 1
+}
+
+wifi_setup() {
+	command -v iw >/dev/null 2>&1 || return 0
+	HS=/etc/NetworkManager/system-connections/Hotspot.nmconnection
+	UP=/etc/NetworkManager/system-connections/Upstream.nmconnection
+	hs_if=wlan0
+	up_if=wlan0
+
+	i=0
+	while [ ! -d /sys/class/net/wlan0 ] && [ "$i" -lt 10 ]; do
+		sleep 1
+		i=$((i + 1))
+	done
+	[ -d /sys/class/net/wlan0 ] || return 0
+
+	if [ -d /sys/class/net/wlan1 ]; then
+		# dongle WiFi USB: internal jadi hotspot, dongle jadi penerima
+		up_if=wlan1
+	elif [ -d /sys/class/net/ap0 ] || iw dev wlan0 interface add ap0 type __ap 2>/dev/null; then
+		# satu radio, dua interface: wlan0 = penerima, ap0 = hotspot
+		hs_if=ap0
+	fi
+
+	sed -i "s/^interface-name=.*/interface-name=$hs_if/" "$HS"
+	sed -i "s/^interface-name=.*/interface-name=$up_if/" "$UP"
+	einfo "Hotspot: $hs_if, Upstream: $up_if"
+}
+
+start() {
+	ebegin "Starting vince-setup"
+
+	for led in /sys/class/leds/*; do
+		[ -d "$led" ] || continue
+		echo heartbeat > "$led/trigger" 2>/dev/null
+		echo 255 > "$led/brightness" 2>/dev/null
+	done
+
+	mkdir -p /mnt/modem /mnt/persist /lib/firmware/wlan/prima
+	if dev="$(part_dev modem)"; then
+		mountpoint -q /mnt/modem || mount -t vfat -o ro "$dev" /mnt/modem 2>/dev/null
+	fi
+	if dev="$(part_dev persist)"; then
+		mountpoint -q /mnt/persist || mount -t ext4 -o ro "$dev" /mnt/persist 2>/dev/null
+	fi
+	for f in /mnt/modem/image/wcnss.*; do
+		[ -e "$f" ] && ln -sf "$f" "/lib/firmware/$(basename "$f")"
+	done
+	for nv in /mnt/persist/WCNSS_qcom_wlan_nv.bin /mnt/persist/wlan/prima/WCNSS_qcom_wlan_nv.bin; do
+		if [ -e "$nv" ]; then
+			ln -sf "$nv" /lib/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin
+			break
+		fi
+	done
+
+	amixer -q set Master 100% unmute 2>/dev/null || true
+	amixer -q set Headphone 100% unmute 2>/dev/null || true
+
+	if command -v nft >/dev/null 2>&1; then
+		nft delete table ip vince 2>/dev/null
+		nft add table ip vince 2>/dev/null
+		nft add chain ip vince post '{ type filter hook postrouting priority 300 ; }' 2>/dev/null
+		nft add rule ip vince post ip ttl set 64 2>/dev/null
+	fi
+
+	wifi_setup
+
+	# folder Samba dan aria2
+	mkdir -p /home/user/share /home/user/downloads /var/lib/aria2 /var/log/samba /etc/samba
+	chown user:user /home/user/share /home/user/downloads /var/lib/aria2 2>/dev/null
+	[ -e /etc/samba/smb.conf ] || cp /usr/share/vince/smb.conf /etc/samba/smb.conf
+
+	# akun Samba "user" memakai password yang sama dengan login
+	if [ -r /etc/vince/smb-pass ] && command -v smbpasswd >/dev/null 2>&1; then
+		if ! pdbedit -L 2>/dev/null | grep -q '^user:'; then
+			pw="$(cat /etc/vince/smb-pass)"
+			printf '%s\n%s\n' "$pw" "$pw" | smbpasswd -s -a user >/dev/null 2>&1
+		fi
+	fi
+
+	eend 0
+}
