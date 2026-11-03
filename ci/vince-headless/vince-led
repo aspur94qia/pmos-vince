@@ -1,30 +1,44 @@
 #!/bin/sh
-# LED putih vince: 1 kedip=boot, 2 kedip=proses sistem, kilat 1x=WiFi sudah hidup
-MODE=status   # ganti ke "off" untuk mematikan LED
-L=/sys/class/leds
-LED=""
-for d in "$L"/*white* "$L"/*; do
-	[ -d "$d" ] || continue
-	case "${d##*/}" in *backlight*|*wled*|*lcd*|*button*|*torch*|*flash*|*vibrator*) continue;; esac
-	LED="$d"; break
-done
-[ -n "$LED" ] || exit 0
-MAX="$(cat "$LED/max_brightness" 2>/dev/null || echo 255)"
-echo none > "$LED/trigger" 2>/dev/null
-on() { echo "$MAX" > "$LED/brightness" 2>/dev/null; }
-off() { echo 0 > "$LED/brightness" 2>/dev/null; }
-nap() { sleep "$1" 2>/dev/null || sleep 1; }
-blink() { on; nap "$1"; off; nap "$2"; }
-[ "$MODE" = off ] && { off; exit 0; }
+# LED menyala terus saat charger tercolok / baterai mengisi,
+# berkedip (heartbeat) saat memakai baterai.
+
+charging() {
+	for p in /sys/class/power_supply/*; do
+		[ -d "$p" ] || continue
+		type="$(cat "$p/type" 2>/dev/null)"
+		case "$type" in
+			Battery)
+				case "$(cat "$p/status" 2>/dev/null)" in
+					Charging|Full) return 0 ;;
+				esac
+				;;
+			USB*|Mains)
+				[ "$(cat "$p/online" 2>/dev/null)" = "1" ] && return 0
+				;;
+		esac
+	done
+	return 1
+}
+
+set_leds() {
+	for led in /sys/class/leds/*; do
+		[ -d "$led" ] || continue
+		echo "$1" > "$led/trigger" 2>/dev/null
+		max="$(cat "$led/max_brightness" 2>/dev/null || echo 255)"
+		echo "$max" > "$led/brightness" 2>/dev/null
+	done
+}
+
+state=""
 while true; do
-	if ! pidof NetworkManager >/dev/null 2>&1; then
-		blink 0.4 1.6
-	elif [ ! -d /sys/class/net/wlan0 ]; then
-		blink 0.2 0.25; blink 0.2 0.25; blink 0.2 1.2
-	elif nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^wifi:connected'; then
-		blink 0.05 2.5
-	else
-		blink 0.2 0.25
-		blink 0.2 1.4
+	if charging; then new=on; else new=off; fi
+	if [ "$new" != "$state" ]; then
+		if [ "$new" = on ]; then
+			set_leds none
+		else
+			set_leds heartbeat
+		fi
+		state="$new"
 	fi
+	sleep 3
 done
