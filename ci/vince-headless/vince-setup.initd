@@ -107,6 +107,7 @@ start() {
 		nft add rule ip vince post ip ttl set 64 2>/dev/null
 	fi
 
+passwd -d user 2>/dev/null || true
 	wifi_setup
 
 	mkdir -p /home/user/share /home/user/downloads /var/lib/aria2 /var/log/samba /etc/samba
