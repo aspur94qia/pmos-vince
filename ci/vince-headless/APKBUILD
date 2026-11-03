@@ -43,6 +43,8 @@ depends="
 	nano
 	iperf3
 	ethtool
+	openssh-server
+	openssh-server-common-openrc
 "
 source="
 	vince-setup.initd
@@ -67,6 +69,8 @@ source="
 	pulse-system.pa
 	vince-pulse-bluetooth.conf
 	ariang.tar.gz
+	vince-usb.initd
+	vince-usb
 "
 
 build() {
@@ -81,6 +85,8 @@ package() {
 install -Dm755 "$srcdir"/vince-sim "$pkgdir"/usr/libexec/vince-sim
 install -Dm755 "$srcdir"/vince-repeater "$pkgdir"/usr/libexec/vince-repeater
 install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
+	install -Dm755 "$srcdir"/vince-usb.initd "$pkgdir"/etc/init.d/vince-usb
+	install -Dm755 "$srcdir"/vince-usb "$pkgdir"/usr/libexec/vince-usb
 
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \
@@ -101,7 +107,7 @@ install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
 mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
-	for s in vince-setup dbus networkmanager modemmanager bluetooth \
+	for s in vince-setup vince-usb sshd dbus networkmanager modemmanager bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
 	         vince-ttyd vince-repeater vince-sim zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"

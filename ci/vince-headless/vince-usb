@@ -1,0 +1,40 @@
+#!/bin/sh
+IP=172.16.42.1
+G=/sys/kernel/config/usb_gadget/g1
+
+gadget_create() {
+	modprobe libcomposite 2>/dev/null
+	mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config 2>/dev/null
+	[ -d "$G" ] && return 0
+	mkdir -p "$G" || return 1
+	echo 0x18d1 > "$G/idVendor"
+	echo 0xd001 > "$G/idProduct"
+	mkdir -p "$G/strings/0x409" "$G/configs/c.1"
+	echo "postmarketOS" > "$G/strings/0x409/manufacturer"
+	echo "Vince" > "$G/strings/0x409/product"
+	mkdir -p "$G/functions/ncm.usb0" 2>/dev/null || mkdir -p "$G/functions/ecm.usb0"
+	for f in "$G"/functions/*; do ln -s "$f" "$G/configs/c.1/" 2>/dev/null; done
+	UDC="$(ls /sys/class/udc 2>/dev/null | head -n1)"
+	[ -n "$UDC" ] && echo "$UDC" > "$G/UDC"
+}
+
+waitif() {
+	i=0
+	until [ -d /sys/class/net/usb0 ]; do
+		i=$((i + 1))
+		[ "$i" -gt "$1" ] && return 1
+		sleep 1
+	done
+	return 0
+}
+
+waitif 30 || { gadget_create; waitif 15; } || exit 1
+
+nmcli device set usb0 managed no >/dev/null 2>&1
+ip link set usb0 up
+ip addr show usb0 | grep -q "$IP/" || ip addr add "$IP/24" dev usb0
+pkill -x unudhcpd 2>/dev/null
+
+exec dnsmasq -k --port=0 --interface=usb0 --bind-interfaces --except-interface=lo \
+	--dhcp-range=172.16.42.2,172.16.42.10,255.255.255.0,12h \
+	--pid-file=/run/vince-usb-dnsmasq.pid

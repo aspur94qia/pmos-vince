@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+
+description="USB networking 172.16.42.1 + DHCP: SSH lewat kabel tanpa prompt"
+
+command=/usr/libexec/vince-usb
+command_background=true
+pidfile=/run/vince-usb.pid
+
+depend() {
+	need localmount
+	after networkmanager vince-setup
+	before sshd
+}
+
+start_pre() {
+	[ -f /etc/ssh/sshd_config ] || return 0
+	grep -q '# vince-usb' /etc/ssh/sshd_config && return 0
+	printf '\n# vince-usb: login tanpa password HANYA lewat kabel USB\nMatch LocalAddress 172.16.42.1\n\tPermitEmptyPasswords yes\n\tPasswordAuthentication yes\n' >> /etc/ssh/sshd_config
+	return 0
+}
