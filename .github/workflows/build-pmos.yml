@@ -17,6 +17,7 @@ jobs:
         run: |
           git config --global http.userAgent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
           pipx install --force "git+https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git"
+          pipx inject pmbootstrap tomli
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build image
