@@ -6,6 +6,7 @@ PMAPORTS="$WORK/cache_git/pmaports"
 PKG_SRC="$PWD/ci/vince-headless"
 
 mkdir -p "$WORK/cache_git"
+[ -f "$WORK/version" ] || echo 8 > "$WORK/version"
 [ -d "$PMAPORTS/.git" ] || git clone --depth 1 \
   https://gitlab.postmarketos.org/postmarketOS/pmaports.git "$PMAPORTS"
 
