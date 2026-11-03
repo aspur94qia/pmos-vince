@@ -9,7 +9,7 @@ license="MIT"
 options="!check"
 builddir="$srcdir"
 install="$pkgname.post-install"
-depends="
+depends="dnsmasq networkmanager 
 	networkmanager
 	networkmanager-cli
 	networkmanager-tui

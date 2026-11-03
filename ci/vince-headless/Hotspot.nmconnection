@@ -19,7 +19,7 @@ key-mgmt=wpa-psk
 proto=rsn;
 pairwise=ccmp;
 group=ccmp;
-psk=__HOTSPOT_PSK__
+psk=12345678
 
 [ipv4]
 method=shared
