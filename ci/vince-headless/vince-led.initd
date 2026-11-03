@@ -1,11 +1,11 @@
 #!/sbin/openrc-run
 
-description="LED indikator charger"
+description="LED notifikasi: status sistem/hotspot + indikator baterai"
 
 command=/usr/libexec/vince-led
 command_background=true
 pidfile=/run/vince-led.pid
 
 depend() {
-	need vince-setup
+	need localmount
 }

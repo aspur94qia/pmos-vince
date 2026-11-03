@@ -1,44 +1,123 @@
 #!/bin/sh
-# LED menyala terus saat charger tercolok / baterai mengisi,
-# berkedip (heartbeat) saat memakai baterai.
+# LED notifikasi vince: pola status + indikator baterai.
+# Status (kilat):  boot = 1x, sistem jalan = 2x, hotspot nyala = 3x
+# Baterai:  <20% (tidak dicas) = pelan 1x | sedang dicas = pelan 2x (lalu status) | 50-55% = nyala diam
+CHARGE_DAN_STATUS=ya   # ya = setelah pelan 2x tampilkan juga pola status; tidak = hanya pelan 2x saat dicas
+LOG=/var/log/vince-led.log
+L=${LEDDIR:-/sys/class/leds}
+PS=${PSDIR:-/sys/class/power_supply}
+: > "$LOG"
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+nap() { sleep "$1" 2>/dev/null || sleep 1; }
+
+pick_leds() {
+	found=""
+	for d in "$L"/*; do
+		[ -d "$d" ] || continue
+		case "${d##*/}" in
+			*white*|*charg*|*status*|*notif*) found="$found $d" ;;
+		esac
+	done
+	if [ -z "$found" ]; then
+		for d in "$L"/*; do
+			[ -d "$d" ] || continue
+			case "${d##*/}" in
+				*backlight*|*wled*|*lcd*|*button*|*torch*|*flash*|*vibrator*|*kbd*) continue ;;
+			esac
+			found="$found $d"
+		done
+	fi
+	echo "$found"
+}
+
+LEDS="$(pick_leds)"
+{
+	echo "=== LED ==="
+	for d in "$L"/*; do [ -d "$d" ] && echo "${d##*/}: max=$(cat "$d/max_brightness" 2>/dev/null) trigger=$(cat "$d/trigger" 2>/dev/null | tr '\n' ' ')"; done
+	echo "=== power_supply ==="
+	for p in "$PS"/*; do [ -d "$p" ] && echo "${p##*/}: type=$(cat "$p/type" 2>/dev/null) status=$(cat "$p/status" 2>/dev/null) online=$(cat "$p/online" 2>/dev/null) capacity=$(cat "$p/capacity" 2>/dev/null)"; done
+	echo "LED dipilih:$LEDS"
+} >> "$LOG" 2>&1
+[ -n "$LEDS" ] || { log "tidak ada LED yang cocok"; exit 1; }
+
+for led in $LEDS; do echo none > "$led/trigger" 2>/dev/null; done
+MAX="$(cat "$(echo $LEDS | cut -d' ' -f1)/max_brightness" 2>/dev/null || echo 255)"
+on()  { for led in $LEDS; do echo "$MAX" > "$led/brightness" 2>/dev/null; done; }
+off() { for led in $LEDS; do echo 0 > "$led/brightness" 2>/dev/null; done; }
+
+flash() {
+	n="$1"
+	while [ "$n" -gt 0 ]; do
+		on; nap "$2"; off
+		n=$((n - 1))
+		[ "$n" -gt 0 ] && nap "$3"
+	done
+}
+kilat() { flash "$1" 0.08 0.22; }
+pelan() { flash "$1" 0.8 0.6; }
 
 charging() {
-	for p in /sys/class/power_supply/*; do
+	for p in "$PS"/*; do
 		[ -d "$p" ] || continue
-		type="$(cat "$p/type" 2>/dev/null)"
-		case "$type" in
+		case "$(cat "$p/type" 2>/dev/null)" in
 			Battery)
 				case "$(cat "$p/status" 2>/dev/null)" in
 					Charging|Full) return 0 ;;
-				esac
-				;;
-			USB*|Mains)
-				[ "$(cat "$p/online" 2>/dev/null)" = "1" ] && return 0
-				;;
+				esac ;;
+			USB*|Mains|Wireless)
+				[ "$(cat "$p/online" 2>/dev/null)" = "1" ] && return 0 ;;
 		esac
 	done
 	return 1
 }
 
-set_leds() {
-	for led in /sys/class/leds/*; do
-		[ -d "$led" ] || continue
-		echo "$1" > "$led/trigger" 2>/dev/null
-		max="$(cat "$led/max_brightness" 2>/dev/null || echo 255)"
-		echo "$max" > "$led/brightness" 2>/dev/null
+batt_cap() {
+	for p in "$PS"/*; do
+		[ -d "$p" ] || continue
+		if [ "$(cat "$p/type" 2>/dev/null)" = Battery ]; then
+			c="$(cat "$p/capacity" 2>/dev/null)"
+			c="${c%%[!0-9]*}"
+			[ -n "$c" ] && { echo "$c"; return; }
+		fi
 	done
+	echo 100
 }
 
-state=""
-while true; do
-	if charging; then new=on; else new=off; fi
-	if [ "$new" != "$state" ]; then
-		if [ "$new" = on ]; then
-			set_leds none
-		else
-			set_leds heartbeat
-		fi
-		state="$new"
+status_level() {
+	if [ ! -e /run/openrc/started/vince-setup ] && ! rc-service vince-setup status 2>/dev/null | grep -q started; then
+		echo 1; return
 	fi
-	sleep 3
+	if iw dev wlan0 info 2>/dev/null | grep -q 'type AP' || pidof hostapd >/dev/null 2>&1; then
+		echo 3
+	else
+		echo 2
+	fi
+}
+
+( sleep 90; [ -d /home/user/share ] && cp "$LOG" /home/user/share/vince-led.log && chown user:user /home/user/share/vince-led.log ) >/dev/null 2>&1 &
+
+off
+last=""
+while true; do
+	cap="$(batt_cap)"
+	if charging; then chg=1; else chg=0; fi
+
+	if [ "$chg" = 0 ] && [ "$cap" -lt 20 ]; then
+		desc="baterai-rendah($cap%)"
+		pelan 1; nap 2
+	elif [ "$chg" = 1 ]; then
+		lvl="$(status_level)"
+		desc="dicas($cap%) status=$lvl"
+		pelan 2; nap 1.5
+		if [ "$CHARGE_DAN_STATUS" = ya ]; then kilat "$lvl"; fi
+		nap 2
+	elif [ "$cap" -ge 50 ] && [ "$cap" -le 55 ]; then
+		desc="baterai-50-55($cap%) nyala"
+		on; nap 5
+	else
+		lvl="$(status_level)"
+		desc="status=$lvl baterai=$cap%"
+		kilat "$lvl"; nap 2
+	fi
+	[ "$desc" != "$last" ] && { log "$desc"; last="$desc"; }
 done
