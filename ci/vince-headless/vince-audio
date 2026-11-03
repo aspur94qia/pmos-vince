@@ -11,6 +11,31 @@ EQ_KIND=""
 LAST=""
 
 log() { echo "$(date '+%H:%M:%S') $*" >> "$LOG"; }
+CARD="$(sed -n 's/^ *\([0-9][0-9]*\) \[.*/\1/p' /proc/asound/cards 2>/dev/null | head -n1)"
+CARD="${CARD:-0}"
+SPLIT_OK=""
+SPLIT_WARN=""
+has() { amixer -c "$CARD" cget "name='$1'" >/dev/null 2>&1; }
+set_ctl() { amixer -q -c "$CARD" cset "name='$1'" "$2" 2>>"$LOG"; }
+split_apply() {
+	[ "$1" = speaker ] || return 0
+	for c in 'RX1 MIX1 INP1' 'RDAC2 MUX' 'EAR_S' 'SPK DAC Switch' 'RX3 MIX1 INP1'; do
+		if ! has "$c"; then
+			[ -n "$SPLIT_WARN" ] || log "split dilewati: kontrol '$c' tidak ada"
+			SPLIT_WARN=1
+			return 0
+		fi
+	done
+	set_ctl 'RX1 MIX1 INP1' RX1
+	set_ctl 'RDAC2 MUX' RX1
+	set_ctl 'EAR_S' 1
+	set_ctl 'SPK DAC Switch' 1
+	set_ctl 'RX3 MIX1 INP1' RX2
+	has 'RX1 Digital Volume' && set_ctl 'RX1 Digital Volume' 128
+	has 'RX3 Digital Volume' && set_ctl 'RX3 Digital Volume' 128
+	[ -n "$SPLIT_OK" ] || log "split aktif: earpiece=kiri (RX1), speaker=kanan (RX2)"
+	SPLIT_OK=1
+}
 
 wait_pulse() {
 	i=0
@@ -76,7 +101,7 @@ eq_apply() {
 apply() {
 	sel="$(pick_port)"
 	[ -n "$sel" ] || return 0
-	[ "$sel" = "$LAST" ] && return 0
+	[ "$sel" = "$LAST" ] && { split_apply "${sel##*|}"; return 0; }
 	sink="${sel%%|*}"
 	rest="${sel#*|}"
 	port="${rest%%|*}"
@@ -86,6 +111,7 @@ apply() {
 	pactl set-sink-volume "$sink" 100% 2>/dev/null
 	eq_apply "$sink" "$kind"
 	LAST="$sel"
+	split_apply "$kind"
 	log "output: $kind ($port) di $sink"
 }
 

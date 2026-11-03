@@ -29,7 +29,6 @@ depends="
 	pulseaudio
 	pulseaudio-bluez
 	alsa-utils
-	alsa-ucm-conf
 	swh-plugins
 	nftables
 	dbus
