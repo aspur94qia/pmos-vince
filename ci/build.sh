@@ -52,6 +52,14 @@ pmbootstrap config service_manager openrc
 pmbootstrap config hostname vince
 pmbootstrap config jobs "$(nproc)"
 
+# buang paket yang tidak ada di repo (supaya build tidak berhenti di satu nama)
+pmbootstrap chroot -- apk update >/dev/null 2>&1 || true
+for p in $(awk '/^depends="/{f=1;next} f&&/^"/{exit} f{print $1}' "$DEST/APKBUILD"); do
+  if [ -z "$(pmbootstrap chroot -- apk search -e "$p" 2>/dev/null)" ]; then
+    echo "PERINGATAN: '$p' tidak ada di repo, dibuang dari depends"
+    sed -i "/^[[:space:]]*$p\$/d" "$DEST/APKBUILD"
+  fi
+done
 pmbootstrap checksum vince-headless
 pmbootstrap -y build vince-headless
 
