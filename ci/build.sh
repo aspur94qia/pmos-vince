@@ -44,6 +44,7 @@ fi
 tar -C "$TMP" -czf "$DEST/ariang.tar.gz" ariang
 
 # --- konfigurasi pmbootstrap ---
+CFG="$HOME/.config/pmbootstrap_v3.cfg"; mkdir -p "$HOME/.config"; echo "[pmbootstrap]" > "$CFG"; pmbootstrap() { command pmbootstrap --config "$CFG" "$@"; }
 pmbootstrap config device xiaomi-vince
 pmbootstrap config ui none
 pmbootstrap config systemd never
