@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+description="Hotspot WiFi (hostapd + dnsmasq)"
+
+command=/usr/libexec/vince-ap
+command_background=true
+pidfile=/run/vince-ap.pid
+
+depend() {
+	need localmount
+	after vince-setup networkmanager
+}
+
+stop_post() {
+	pkill hostapd 2>/dev/null
+	pkill -f "dnsmasq -C /etc/vince/dnsmasq-ap.conf" 2>/dev/null
+	nft delete table ip vince_ap 2>/dev/null
+	return 0
+}

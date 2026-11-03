@@ -1,0 +1,106 @@
+#!/bin/sh
+# Hotspot WiFi: hostapd + dnsmasq + NAT, tanpa NetworkManager.
+# SSID dan password dibaca dari profil Hotspot.nmconnection. Log: /var/log/vince-ap.log
+LOG=/var/log/vince-ap.log
+IF=wlan0
+ADDR=192.168.50.1
+NMC=/etc/NetworkManager/system-connections/Hotspot.nmconnection
+CONF=/run/vince-hostapd.conf
+DNSCONF=/etc/vince/dnsmasq-ap.conf
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+trim() {
+	size="$(wc -c < "$LOG" 2>/dev/null || echo 0)"
+	if [ "$size" -gt 200000 ]; then
+		tail -n 300 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+	fi
+}
+
+cleanup() {
+	pkill -f "dnsmasq -C $DNSCONF" 2>/dev/null
+	pkill hostapd 2>/dev/null
+	nft delete table ip vince_ap 2>/dev/null
+	exit 0
+}
+trap cleanup TERM INT
+
+ssid="$(sed -n 's/^ssid=//p' "$NMC" 2>/dev/null | head -n1)"
+psk="$(sed -n 's/^psk=//p' "$NMC" 2>/dev/null | head -n1)"
+[ -n "$ssid" ] || ssid="pmOS-Vince"
+if [ "${#psk}" -lt 8 ]; then
+	log "ERROR: password hotspot kosong atau kurang dari 8 karakter ($NMC)"
+	exit 1
+fi
+
+command -v hostapd >/dev/null 2>&1 || { log "ERROR: hostapd tidak terpasang"; exit 1; }
+command -v dnsmasq >/dev/null 2>&1 || { log "ERROR: dnsmasq tidak terpasang"; exit 1; }
+
+i=0
+until [ -d "/sys/class/net/$IF" ]; do
+	[ $((i % 10)) -eq 0 ] && log "menunggu $IF (driver/firmware WiFi belum siap)"
+	i=$((i + 1))
+	sleep 3
+done
+log "$IF ditemukan"
+
+umask 077
+cat > "$CONF" << EOF
+interface=$IF
+driver=nl80211
+ssid=$ssid
+hw_mode=g
+channel=6
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$psk
+ieee80211w=0
+max_num_sta=8
+ctrl_interface=/run/hostapd
+ctrl_interface_group=0
+EOF
+umask 022
+
+nmcli device set "$IF" managed no >/dev/null 2>&1
+rfkill unblock wifi 2>/dev/null
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
+
+nat() {
+	if command -v nft >/dev/null 2>&1; then
+		nft delete table ip vince_ap 2>/dev/null
+		if nft add table ip vince_ap 2>>"$LOG" \
+		   && nft add chain ip vince_ap post '{ type nat hook postrouting priority 100 ; }' 2>>"$LOG" \
+		   && nft add rule ip vince_ap post oifname != "$IF" masquerade 2>>"$LOG"; then
+			log "NAT aktif (nftables)"
+			return 0
+		fi
+	fi
+	if command -v iptables >/dev/null 2>&1; then
+		if iptables -t nat -C POSTROUTING ! -o "$IF" -j MASQUERADE 2>/dev/null \
+		   || iptables -t nat -A POSTROUTING ! -o "$IF" -j MASQUERADE 2>>"$LOG"; then
+			log "NAT aktif (iptables)"
+			return 0
+		fi
+	fi
+	log "PERINGATAN: NAT gagal (kernel mungkin tanpa modul NAT): klien dapat IP tapi tanpa internet"
+	return 1
+}
+
+while true; do
+	ip link set "$IF" down 2>/dev/null
+	ip addr flush dev "$IF" 2>/dev/null
+	ip addr add "$ADDR/24" dev "$IF" 2>>"$LOG"
+	ip link set "$IF" up 2>>"$LOG"
+	nat
+
+	pkill -f "dnsmasq -C $DNSCONF" 2>/dev/null
+	dnsmasq -C "$DNSCONF" 2>>"$LOG" || log "PERINGATAN: dnsmasq gagal start"
+
+	log "menjalankan hostapd (SSID: $ssid)"
+	hostapd "$CONF" >> "$LOG" 2>&1
+	log "hostapd berhenti (kode $?), ulangi 10 detik lagi"
+	trim
+	sleep 10
+done

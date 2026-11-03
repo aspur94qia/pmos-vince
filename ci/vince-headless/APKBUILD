@@ -19,6 +19,7 @@ depends="
 	mobile-broadband-provider-info
 	msm-modem-uim-selection
 	iw
+	hostapd
 	dnsmasq
 	iptables
 	bluez
@@ -56,6 +57,10 @@ source="
 	vince-aria2.initd
 	vince-ariang.initd
 	vince-ttyd.initd
+	vince-ap.initd
+	vince-ap
+	dnsmasq-ap.conf
+	vince-unmanaged.conf
 	vince-hotspot.initd
 	vince-hotspot
 	vince-diag
@@ -84,10 +89,13 @@ build() {
 }
 
 package() {
-	for s in setup pulse bluetooth aria2 ariang ttyd hotspot led repeater sim; do
+	for s in setup pulse bluetooth aria2 ariang ttyd ap hotspot led repeater sim; do
 		install -Dm755 "$srcdir"/vince-$s.initd "$pkgdir"/etc/init.d/vince-$s
 	done
 	install -Dm755 "$srcdir"/vince-bt "$pkgdir"/usr/libexec/vince-bt
+	install -Dm755 "$srcdir"/vince-ap "$pkgdir"/usr/libexec/vince-ap
+	install -Dm644 "$srcdir"/dnsmasq-ap.conf "$pkgdir"/etc/vince/dnsmasq-ap.conf
+	install -Dm644 "$srcdir"/vince-unmanaged.conf "$pkgdir"/etc/NetworkManager/conf.d/vince-unmanaged.conf
 	install -Dm755 "$srcdir"/vince-hotspot "$pkgdir"/usr/libexec/vince-hotspot
 	install -Dm755 "$srcdir"/vince-diag "$pkgdir"/usr/bin/vince-diag
 install -Dm755 "$srcdir"/vince-sim "$pkgdir"/usr/libexec/vince-sim
@@ -117,7 +125,7 @@ install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
 	for s in vince-setup vince-usb sshd dbus networkmanager modemmanager bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
-	         vince-ttyd vince-hotspot vince-repeater vince-sim zram-init; do
+	         vince-ttyd vince-ap vince-sim zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"
 	done
 }

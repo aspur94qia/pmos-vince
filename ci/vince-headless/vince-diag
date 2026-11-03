@@ -21,3 +21,5 @@ dmesg 2>/dev/null | grep -i -E "wcn36xx|wcnss|wlan|cfg80211" | tail -12
 echo "== log NetworkManager/dnsmasq/wpa =="
 ( tail -n 300 /var/log/messages 2>/dev/null || logread 2>/dev/null ) \
 	| grep -i -E "NetworkManager|dnsmasq|wpa_supplicant" | tail -20
+echo "== log hotspot hostapd =="
+tail -n 25 /var/log/vince-ap.log 2>/dev/null
