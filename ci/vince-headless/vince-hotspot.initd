@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+
+description="Watchdog hotspot WiFi"
+
+command=/usr/libexec/vince-hotspot
+command_background=true
+pidfile=/run/vince-hotspot.pid
+
+depend() {
+	need networkmanager
+	after vince-setup
+}

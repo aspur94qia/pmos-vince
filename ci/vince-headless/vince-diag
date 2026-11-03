@@ -1,0 +1,23 @@
+#!/bin/sh
+# Diagnostik WiFi/hotspot. Jalankan: vince-diag
+echo "== antarmuka =="
+ip -br link 2>/dev/null | grep -i -E "wlan|ap0"
+echo "== iw: mode dan kombinasi =="
+iw list 2>/dev/null | grep -A12 -E "Supported interface modes|valid interface combinations" | head -40
+echo "== NetworkManager =="
+nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device 2>&1 | head
+nmcli -t -f NAME,TYPE,DEVICE,ACTIVE connection show 2>&1 | head
+echo "== program =="
+for b in dnsmasq iptables nft wpa_supplicant; do
+	printf "%s: " "$b"
+	command -v "$b" || echo TIDAK ADA
+done
+echo "== layanan =="
+rc-status 2>/dev/null | grep -i -E "networkmanager|wpa_supplicant|dbus|vince|dnsmasq"
+echo "== log hotspot =="
+tail -n 15 /var/log/vince-hotspot.log 2>/dev/null
+echo "== kernel =="
+dmesg 2>/dev/null | grep -i -E "wcn36xx|wcnss|wlan|cfg80211" | tail -12
+echo "== log NetworkManager/dnsmasq/wpa =="
+( tail -n 300 /var/log/messages 2>/dev/null || logread 2>/dev/null ) \
+	| grep -i -E "NetworkManager|dnsmasq|wpa_supplicant" | tail -20

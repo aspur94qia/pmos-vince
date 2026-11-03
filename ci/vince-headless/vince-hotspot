@@ -1,0 +1,31 @@
+#!/bin/sh
+# Pastikan hotspot selalu nyala. Log: /var/log/vince-hotspot.log
+LOG=/var/log/vince-hotspot.log
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+trim() {
+	size="$(wc -c < "$LOG" 2>/dev/null || echo 0)"
+	if [ "$size" -gt 100000 ]; then
+		tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+	fi
+}
+
+while true; do
+	if [ ! -d /sys/class/net/wlan0 ]; then
+		log "wlan0 belum ada (driver/firmware WiFi belum siap)"
+	elif ! command -v nmcli >/dev/null 2>&1; then
+		log "nmcli tidak ada"
+	elif ! command -v dnsmasq >/dev/null 2>&1; then
+		log "dnsmasq tidak terpasang: mode shared NetworkManager tidak bisa jalan"
+	else
+		active="$(nmcli -t -f NAME connection show --active 2>/dev/null)"
+		if echo "$active" | grep -qx Upstream; then
+			: # WiFi sedang jadi penerima (client), hotspot menunggu
+		elif ! echo "$active" | grep -qx Hotspot; then
+			out="$(nmcli connection up Hotspot 2>&1)"
+			log "up Hotspot: $out"
+		fi
+	fi
+	trim
+	sleep 20
+done
