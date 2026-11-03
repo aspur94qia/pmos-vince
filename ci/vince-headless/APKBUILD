@@ -49,7 +49,6 @@ depends="
 	ethtool
 	openssh-server
 	openssh-server-common-openrc
-	swh-plugins
 	soc-qcom-msm8953-ucm
 "
 source="
@@ -87,8 +86,6 @@ source="
 	vince-audio.initd
 	vince-audio
 	vince-audio-diag
-	vince-audio.initd
-	vince-audio
 "
 
 build() {
@@ -113,8 +110,6 @@ install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
 	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 	install -Dm755 "$srcdir"/vince-audio-diag "$pkgdir"/usr/bin/vince-audio-diag
-	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
-	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \
