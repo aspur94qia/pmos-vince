@@ -63,7 +63,16 @@ done
 pmbootstrap checksum vince-headless
 pmbootstrap -y build vince-headless
 
-pmbootstrap -y install --password "$PW" --add vince-headless
+for i in 1 2 3; do
+  if pmbootstrap -y install --password "$PW" --add vince-headless; then
+    break
+  fi
+  [ "$i" = 3 ] && { echo "install gagal 3 kali" >&2; exit 1; }
+  echo "install gagal (percobaan $i), mencoba lagi..."
+  sudo pkill -f qemu-aarch64 || true
+  sleep 5
+  pmbootstrap shutdown || true
+done
 
 rm -rf /tmp/pmos-export
 pmbootstrap -y export /tmp/pmos-export
