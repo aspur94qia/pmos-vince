@@ -23,7 +23,6 @@ depends="
 	alsa-ucm-conf
 	nftables
 	dbus
-	sudo
 	samba
 	aria2
 	busybox-extras
@@ -89,8 +88,6 @@ package() {
 	mkdir -p "$pkgdir"/usr/share/vince
 	cp -r "$srcdir"/ariang "$pkgdir"/usr/share/vince/ariang
 
-	printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$srcdir"/vince-wheel
-	install -Dm440 "$srcdir"/vince-wheel "$pkgdir"/etc/sudoers.d/vince-wheel
 
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
