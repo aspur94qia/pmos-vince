@@ -12,6 +12,6 @@ depend() {
 }
 
 stop_post() {
-	pkill -f 'bluetoothctl --agent' 2>/dev/null
+	pkill -x bluetoothctl 2>/dev/null
 	return 0
 }

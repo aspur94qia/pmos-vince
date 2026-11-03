@@ -23,6 +23,8 @@ depends="
 	alsa-utils
 	alsa-ucm-conf
 	nftables
+	dnsmasq
+	iptables
 	dbus
 	samba
 	aria2
@@ -91,7 +93,7 @@ install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
 mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
-	for s in vince-setup dbus networkmanager modemmanager wpa_supplicant bluetooth \
+	for s in vince-setup dbus networkmanager modemmanager bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
 	         vince-ttyd zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"

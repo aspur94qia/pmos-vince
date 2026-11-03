@@ -19,6 +19,8 @@ blink() { on; nap "$1"; off; nap "$2"; }
 while true; do
 	if ! pidof NetworkManager >/dev/null 2>&1; then
 		blink 0.4 1.6
+	elif [ ! -d /sys/class/net/wlan0 ]; then
+		blink 0.2 0.25; blink 0.2 0.25; blink 0.2 1.2
 	elif nmcli -t -f TYPE,STATE device 2>/dev/null | grep -q '^wifi:connected'; then
 		blink 0.05 2.5
 	else

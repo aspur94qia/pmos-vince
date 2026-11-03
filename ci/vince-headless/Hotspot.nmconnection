@@ -9,10 +9,14 @@ autoconnect-priority=10
 [wifi]
 mode=ap
 band=bg
+channel=6
 ssid=pmOS-Vince
 
 [wifi-security]
 key-mgmt=wpa-psk
+proto=rsn;
+pairwise=ccmp;
+group=ccmp;
 psk=__HOTSPOT_PSK__
 
 [ipv4]

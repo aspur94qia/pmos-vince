@@ -1,6 +1,6 @@
 #!/sbin/openrc-run
 
-description="Vince: LED, firmware, TTL, interface WiFi (hotspot/repeater), Samba"
+description="Vince: firmware, TTL, interface WiFi (hotspot/repeater), Samba"
 
 depend() {
 	need localmount
@@ -17,6 +17,17 @@ part_dev() {
 	return 1
 }
 
+wcnss_rescue() {
+	for rp in /sys/class/remoteproc/*; do
+		[ -e "$rp/firmware" ] || continue
+		grep -q wcnss "$rp/firmware" 2>/dev/null || continue
+		st="$(cat "$rp/state" 2>/dev/null)"
+		[ "$st" = running ] && continue
+		einfo "wcnss state=$st, start ulang"
+		echo start > "$rp/state" 2>/dev/null
+	done
+}
+
 wifi_setup() {
 	command -v iw >/dev/null 2>&1 || return 0
 	HS=/etc/NetworkManager/system-connections/Hotspot.nmconnection
@@ -24,30 +35,50 @@ wifi_setup() {
 	hs_if=wlan0
 	up_if=wlan0
 
+	modprobe wcn36xx 2>/dev/null
+	modprobe btqcomsmd 2>/dev/null
 	i=0
-	while [ ! -d /sys/class/net/wlan0 ] && [ "$i" -lt 10 ]; do
+	while [ ! -d /sys/class/net/wlan0 ] && [ "$i" -lt 20 ]; do
+		[ "$i" = 3 ] && wcnss_rescue
+		[ "$i" = 10 ] && wcnss_rescue
 		sleep 1
 		i=$((i + 1))
 	done
-	[ -d /sys/class/net/wlan0 ] || return 0
+	if [ ! -d /sys/class/net/wlan0 ]; then
+		ewarn "wlan0 tidak muncul (firmware WiFi?)"
+		return 0
+	fi
+	rfkill unblock wifi 2>/dev/null
 
 	if [ -d /sys/class/net/wlan1 ]; then
-		# dongle WiFi USB: internal jadi hotspot, dongle jadi penerima
 		up_if=wlan1
-	elif [ -d /sys/class/net/ap0 ] || iw dev wlan0 interface add ap0 type __ap 2>/dev/null; then
-		# satu radio, dua interface: wlan0 = penerima, ap0 = hotspot
+	elif [ -e /etc/vince/use-ap0 ] && { [ -d /sys/class/net/ap0 ] || iw dev wlan0 interface add ap0 type __ap 2>/dev/null; }; then
 		hs_if=ap0
 	fi
 
 	sed -i "s/^interface-name=.*/interface-name=$hs_if/" "$HS"
 	sed -i "s/^interface-name=.*/interface-name=$up_if/" "$UP"
 	einfo "Hotspot: $hs_if, Upstream: $up_if"
+
+	( for t in 1 2 3 4 5 6; do
+		sleep 20
+		nmcli -t -f NAME connection show --active 2>/dev/null | grep -qi hotspot && exit 0
+		nmcli connection up Hotspot >/dev/null 2>&1
+	done ) >/dev/null 2>&1 </dev/null &
 }
 
 start() {
 	ebegin "Starting vince-setup"
 
+	if [ ! -x /usr/libexec/vince-led ]; then
+		for led in /sys/class/leds/*; do
+			[ -d "$led" ] || continue
+			echo heartbeat > "$led/trigger" 2>/dev/null
+			echo 255 > "$led/brightness" 2>/dev/null
+		done
+	fi
 
+	rfkill unblock all 2>/dev/null
 	mkdir -p /mnt/modem /mnt/persist /lib/firmware/wlan/prima
 	if dev="$(part_dev modem)"; then
 		mountpoint -q /mnt/modem || mount -t vfat -o ro "$dev" /mnt/modem 2>/dev/null
@@ -77,12 +108,10 @@ start() {
 
 	wifi_setup
 
-	# folder Samba dan aria2
 	mkdir -p /home/user/share /home/user/downloads /var/lib/aria2 /var/log/samba /etc/samba
 	chown user:user /home/user/share /home/user/downloads /var/lib/aria2 2>/dev/null
 	[ -e /etc/samba/smb.conf ] || cp /usr/share/vince/smb.conf /etc/samba/smb.conf
 
-	# akun Samba "user" memakai password yang sama dengan login
 	if [ -r /etc/vince/smb-pass ] && command -v smbpasswd >/dev/null 2>&1; then
 		if ! pdbedit -L 2>/dev/null | grep -q '^user:'; then
 			pw="$(cat /etc/vince/smb-pass)"
