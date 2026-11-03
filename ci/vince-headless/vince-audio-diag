@@ -1,0 +1,12 @@
+#!/bin/sh
+export PULSE_SERVER=unix:/var/run/pulse/native
+echo "== kartu suara =="; aplay -l 2>&1; cat /proc/asound/cards 2>&1
+echo "== paket UCM =="; apk info 2>/dev/null | grep -Ei 'ucm|soc-qcom|swh|ladspa|pulseaudio'
+echo "== file UCM =="; ls /usr/share/alsa/ucm2/conf.d 2>&1 | head -n 30; ls /usr/share/alsa/ucm2/Qualcomm 2>&1 | head -n 30
+echo "== pulse: kartu dan profil =="; pactl list cards 2>&1 | grep -E 'Name:|Active Profile|Ports:|\[|type:' | head -n 60
+echo "== pulse: sink dan port =="; pactl list sinks 2>&1 | grep -E 'Name:|Active Port|\[Out\]|\[In\]|Volume:|Mute:' | head -n 60
+echo "== default sink =="; pactl info 2>&1 | grep -i 'default sink'
+echo "== modul =="; pactl list short modules 2>&1 | grep -Ei 'ladspa|bluez|loopback|udev|switch'
+echo "== ladspa =="; ls /usr/lib/ladspa 2>&1 | head -n 5
+echo "== mixer (ringkas) =="; amixer -c 0 scontrols 2>&1 | head -n 40
+echo "== log vince-audio =="; tail -n 20 /var/log/vince-audio.log 2>&1

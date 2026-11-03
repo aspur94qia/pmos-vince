@@ -1,6 +1,6 @@
 #!/sbin/openrc-run
 
-description="Audio: speaker/headset otomatis + EQ untuk speaker"
+description="Routing audio: speaker/headset otomatis + EQ"
 
 command=/usr/libexec/vince-audio
 command_background=true
@@ -8,4 +8,10 @@ pidfile=/run/vince-audio.pid
 
 depend() {
 	need vince-pulse
+	after vince-bluetooth
+}
+
+stop_post() {
+	pkill -f "pactl subscribe" 2>/dev/null
+	return 0
 }

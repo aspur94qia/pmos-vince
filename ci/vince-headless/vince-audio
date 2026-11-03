@@ -1,66 +1,107 @@
 #!/bin/sh
 export PULSE_SERVER=unix:/var/run/pulse/native
-export LC_ALL=C
 LOG=/var/log/vince-audio.log
-EQ_PLUGIN=/usr/lib/ladspa/mbeq_1197.so
-EQ_SPEAKER="6,6,5,4,2,0,0,0,0,1,2,4,5,6,4"
-
-log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
-
-until pactl info >/dev/null 2>&1; do sleep 2; done
-log "pulseaudio siap"
-
-phys_sink() { pactl list short sinks | awk '$2 !~ /bluez|null|vince_eq/ {print $2; exit}'; }
-
-ports_of() {
-	pactl list sinks | awk -v s="$1" '
-		$1=="Name:" { cur=$2; inp=0 }
-		cur==s && /^\tPorts:/ { inp=1; next }
-		cur==s && /^\tActive Port:/ { inp=0 }
-		cur==s && inp {
-			line=$0; sub(/^\t+/, "", line)
-			name=line; sub(/: .*/, "", name)
-			st="unknown"
-			if (line ~ /not available/) st="no"
-			else if (line ~ /availability unknown/) st="unknown"
-			else if (line ~ /available/) st="yes"
-			print name "|" st
-		}'
-}
-
-EQMOD=""
-eq_unload() {
-	[ -n "$EQMOD" ] && pactl unload-module "$EQMOD" 2>/dev/null
-	EQMOD=""
-}
-eq_load() {
-	[ -e "$EQ_PLUGIN" ] || return 1
-	[ -n "$EQMOD" ] && return 0
-	EQMOD="$(pactl load-module module-ladspa-sink sink_name=vince_eq master="$1" \
-		plugin=mbeq_1197 label=mbeq control="$EQ_SPEAKER" 2>>"$LOG")" || { EQMOD=""; return 1; }
-	[ -n "$EQMOD" ]
-}
-
+EQ_SINK=vince_eq
+LADSPA=/usr/lib/ladspa/mbeq_1197.so
+# 15 band (dB): 50 100 156 220 311 440 622 880 1250 1750 2500 3500 5000 10000 20000 Hz
+EQ_SPEAKER="0,4,6,5,2,0,-1,0,1,2,3,5,6,5,2"
+EQ_HEADSET="3,4,3,1,0,-1,-1,0,1,1,2,3,4,3,1"
+EQ_MOD=""
+EQ_KIND=""
 LAST=""
-while true; do
-	sink="$(phys_sink)"
-	if [ -n "$sink" ]; then
-		P="$(ports_of "$sink")"
-		hs="$(echo "$P" | awk -F'|' 'tolower($1) ~ /headphone|headset/ && $2=="yes" {print $1; exit}')"
-		sp="$(echo "$P" | awk -F'|' 'tolower($1) ~ /speaker/ {print $1; exit}')"
-		if [ -n "$hs" ]; then mode=headset; want="$hs"; else mode=speaker; want="$sp"; fi
-		state="$sink|$mode|$want"
-		if [ "$state" != "$LAST" ]; then
-			[ -n "$want" ] && pactl set-sink-port "$sink" "$want" 2>>"$LOG"
-			if [ "$mode" = speaker ] && eq_load "$sink"; then
-				pactl set-default-sink vince_eq
-			else
-				eq_unload
-				pactl set-default-sink "$sink"
-			fi
-			log "mode=$mode port=$want sink=$sink eq=${EQMOD:-off}"
-			LAST="$state"
-		fi
+
+log() { echo "$(date '+%H:%M:%S') $*" >> "$LOG"; }
+
+wait_pulse() {
+	i=0
+	until pactl info >/dev/null 2>&1; do
+		i=$((i + 1))
+		[ "$i" -gt 90 ] && return 1
+		sleep 1
+	done
+	return 0
+}
+
+pick_port() {
+	pactl list sinks 2>/dev/null | awk '
+	function flush(   i, hp, sp) {
+		if (name ~ /^alsa_output/) {
+			for (i = 1; i <= n; i++) {
+				l = tolower(pn[i])
+				if (l ~ /headphone|headset|lineout/ && !na[i] && hp == "") hp = pn[i]
+				if (l ~ /speaker/ && sp == "") sp = pn[i]
+			}
+			if (hp != "") { print name "|" hp "|headset"; found = 1; exit }
+			if (sp != "") { print name "|" sp "|speaker"; found = 1; exit }
+		}
+	}
+	/^Sink #/ { if (insink) flush(); insink = 1; name = ""; n = 0; inports = 0; next }
+	insink && /^\tName: / { name = $2; next }
+	insink && /^\tPorts:/ { inports = 1; next }
+	insink && /^\tActive Port:/ { inports = 0; next }
+	insink && inports && /^\t\t[^\t]/ {
+		s = $0; sub(/^\t\t/, "", s)
+		p = s; sub(/: .*/, "", p)
+		n++; pn[n] = p; na[n] = (s ~ /not available\)/)
+		next
+	}
+	END { if (insink && !found) flush() }'
+}
+
+eq_apply() {
+	if [ ! -e "$LADSPA" ]; then
+		pactl set-default-sink "$1" 2>/dev/null
+		return 0
 	fi
+	[ -n "$EQ_MOD" ] && [ "$EQ_KIND" = "$2" ] && return 0
+	curve="$EQ_SPEAKER"
+	[ "$2" = headset ] && curve="$EQ_HEADSET"
+	[ -n "$EQ_MOD" ] && pactl unload-module "$EQ_MOD" 2>/dev/null
+	EQ_MOD=""
+	if m="$(pactl load-module module-ladspa-sink sink_name="$EQ_SINK" master="$1" \
+		plugin=mbeq_1197 label=mbeq control="$curve" 2>>"$LOG")" && [ -n "$m" ]; then
+		EQ_MOD="$m"
+		EQ_KIND="$2"
+		pactl set-default-sink "$EQ_SINK" 2>/dev/null
+		pactl list short sink-inputs 2>/dev/null | while read -r id _rest; do
+			pactl move-sink-input "$id" "$EQ_SINK" 2>/dev/null
+		done
+		log "EQ $2 aktif"
+	else
+		log "EQ gagal dimuat, lanjut tanpa EQ"
+		pactl set-default-sink "$1" 2>/dev/null
+	fi
+}
+
+apply() {
+	sel="$(pick_port)"
+	[ -n "$sel" ] || return 0
+	[ "$sel" = "$LAST" ] && return 0
+	sink="${sel%%|*}"
+	rest="${sel#*|}"
+	port="${rest%%|*}"
+	kind="${rest##*|}"
+	pactl set-sink-port "$sink" "$port" 2>>"$LOG"
+	pactl set-sink-mute "$sink" 0 2>/dev/null
+	pactl set-sink-volume "$sink" 100% 2>/dev/null
+	eq_apply "$sink" "$kind"
+	LAST="$sel"
+	log "output: $kind ($port) di $sink"
+}
+
+while true; do
+	wait_pulse || { sleep 5; continue; }
+	LAST=""
+	EQ_MOD=""
+	EQ_KIND=""
+	apply
+	pactl subscribe 2>/dev/null | while read -r ev; do
+		case "$ev" in
+		*" on sink "*|*" on card "*|*" on server "*)
+			sleep 1
+			apply
+			;;
+		esac
+	done
 	sleep 3
 done

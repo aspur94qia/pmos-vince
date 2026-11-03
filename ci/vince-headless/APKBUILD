@@ -50,6 +50,8 @@ depends="
 	ethtool
 	openssh-server
 	openssh-server-common-openrc
+	swh-plugins
+	soc-qcom-msm8953-ucm
 "
 source="
 	vince-setup.initd
@@ -85,6 +87,9 @@ source="
 	vince-usb
 	vince-audio.initd
 	vince-audio
+	vince-audio-diag
+	vince-audio.initd
+	vince-audio
 "
 
 build() {
@@ -106,6 +111,9 @@ install -Dm755 "$srcdir"/vince-repeater "$pkgdir"/usr/libexec/vince-repeater
 install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 	install -Dm755 "$srcdir"/vince-usb.initd "$pkgdir"/etc/init.d/vince-usb
 	install -Dm755 "$srcdir"/vince-usb "$pkgdir"/usr/libexec/vince-usb
+	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
+	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
+	install -Dm755 "$srcdir"/vince-audio-diag "$pkgdir"/usr/bin/vince-audio-diag
 	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
 	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 
