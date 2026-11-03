@@ -49,6 +49,8 @@ source="
 	vince-aria2.initd
 	vince-ariang.initd
 	vince-ttyd.initd
+	vince-repeater.initd
+	vince-repeater
 	vince-led.initd
 	vince-led
 	vince-bt
@@ -68,10 +70,11 @@ build() {
 }
 
 package() {
-	for s in setup pulse bluetooth aria2 ariang ttyd led; do
+	for s in setup pulse bluetooth aria2 ariang ttyd led repeater; do
 		install -Dm755 "$srcdir"/vince-$s.initd "$pkgdir"/etc/init.d/vince-$s
 	done
 	install -Dm755 "$srcdir"/vince-bt "$pkgdir"/usr/libexec/vince-bt
+install -Dm755 "$srcdir"/vince-repeater "$pkgdir"/usr/libexec/vince-repeater
 install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 
 	for c in AutoSIM Hotspot Upstream; do
@@ -95,7 +98,7 @@ install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
 	for s in vince-setup dbus networkmanager modemmanager bluetooth \
 	         vince-pulse vince-bluetooth samba vince-aria2 vince-ariang \
-	         vince-ttyd zram-init; do
+	         vince-ttyd vince-repeater zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"
 	done
 }

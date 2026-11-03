@@ -1,0 +1,16 @@
+#!/sbin/openrc-run
+
+description="WiFi repeater: wlan0 penerima + ap0 hotspot (satu chip)"
+
+command=/usr/libexec/vince-repeater
+command_background=true
+pidfile=/run/vince-repeater.pid
+
+depend() {
+	need networkmanager vince-setup
+}
+
+stop_post() {
+	rm -f /run/vince-repeater.active
+	return 0
+}

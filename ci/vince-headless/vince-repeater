@@ -1,0 +1,89 @@
+#!/bin/sh
+# Repeater WiFi satu chip: wlan0 = penerima (STA), ap0 = hotspot, channel sama
+CFG=/home/user/share/repeater.txt
+LOG=/home/user/share/vince-repeater.log
+FLAG=/run/vince-repeater.active
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+mkdir -p /home/user/share
+[ -e "$CFG" ] || printf '%s\n%s\n' "ISI-NAMA-WIFI-SUMBER" "ISI-PASSWORD-WIFI" > "$CFG"
+touch "$LOG"; chown user:user "$CFG" "$LOG" 2>/dev/null; chmod 600 "$CFG"
+
+SSID="$(sed -n 1p "$CFG" | tr -d '\r')"
+PSK="$(sed -n 2p "$CFG" | tr -d '\r')"
+
+i=0
+while [ ! -d /sys/class/net/wlan0 ] && [ "$i" -lt 60 ]; do sleep 1; i=$((i + 1)); done
+[ -d /sys/class/net/wlan0 ] || { log "wlan0 tidak ada (firmware WiFi?)"; exit 1; }
+i=0
+until nmcli -t -f DEVICE device 2>/dev/null | grep -qx wlan0; do
+	i=$((i + 1)); [ "$i" -gt 30 ] && break; sleep 1
+done
+
+{ echo "=== kemampuan chip ==="; iw list 2>/dev/null | grep -A10 'valid interface combinations'; echo "=== interface ==="; iw dev; } >> "$LOG" 2>&1
+
+hotspot_only() {
+	nmcli con down Upstream >/dev/null 2>&1
+	iw dev ap0 del >/dev/null 2>&1
+	nmcli con modify Hotspot connection.autoconnect yes connection.interface-name wlan0 802-11-wireless.channel 6 >/dev/null 2>&1
+	nmcli -w 30 con up Hotspot >/dev/null 2>&1
+}
+
+case "$SSID" in
+	""|ISI-NAMA*)
+		log "repeater.txt belum diisi: mode hotspot saja"
+		hotspot_only
+		exit 0 ;;
+esac
+touch "$FLAG"
+
+ch_of() {
+	f="$1"; [ -n "$f" ] || return 1
+	if [ "$f" -ge 2412 ] && [ "$f" -le 2472 ]; then echo $(( (f - 2407) / 5 )); else return 1; fi
+}
+cur_freq() { iw dev wlan0 link 2>/dev/null | awk '/freq:/{printf "%d", $2}'; }
+
+start_repeater() {
+	log "mulai repeater, sumber: $SSID"
+	nmcli con modify Hotspot connection.autoconnect no >/dev/null 2>&1
+	nmcli con down Hotspot >/dev/null 2>&1
+	iw dev ap0 del >/dev/null 2>&1
+	nmcli con delete Upstream >/dev/null 2>&1
+	nmcli con add type wifi ifname wlan0 con-name Upstream ssid "$SSID" \
+		802-11-wireless.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" \
+		connection.autoconnect no ipv4.method auto ipv6.method ignore >/dev/null 2>&1
+	nmcli -w 40 con up Upstream >>"$LOG" 2>&1 || { log "gagal sambung ke sumber (password salah / sinyal lemah / bukan 2.4GHz?)"; return 1; }
+	CH="$(ch_of "$(cur_freq)")" || { log "sumber bukan 2.4GHz atau channel tak terbaca"; return 1; }
+	log "sumber tersambung di channel $CH"
+	iw dev wlan0 interface add ap0 type __ap >>"$LOG" 2>&1 || { log "ap0 gagal dibuat: chip kemungkinan tidak mendukung client+hotspot bersamaan"; return 1; }
+	i=0
+	until nmcli -t -f DEVICE device 2>/dev/null | grep -qx ap0; do
+		i=$((i + 1)); [ "$i" -gt 10 ] && break; sleep 1
+	done
+	nmcli con modify Hotspot connection.interface-name ap0 802-11-wireless.band bg 802-11-wireless.channel "$CH" >>"$LOG" 2>&1
+	nmcli -w 40 con up Hotspot ifname ap0 >>"$LOG" 2>&1 || { log "hotspot di ap0 gagal naik"; return 1; }
+	log "REPEATER AKTIF (channel $CH)"
+	return 0
+}
+
+fails=0
+while true; do
+	if start_repeater; then
+		fails=0
+		while true; do
+			sleep 30
+			C2="$(ch_of "$(cur_freq)")" || { log "sumber putus"; break; }
+			[ "$C2" = "$CH" ] || { log "channel sumber berubah $CH -> $C2"; break; }
+			nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx Hotspot || { log "hotspot mati"; break; }
+		done
+	else
+		fails=$((fails + 1))
+		log "percobaan gagal ke-$fails"
+		if [ "$fails" -ge 3 ]; then
+			log "menyerah: kembali ke hotspot saja (lihat kemampuan chip di atas)"
+			hotspot_only
+			exit 0
+		fi
+		sleep 10
+	fi
+done
