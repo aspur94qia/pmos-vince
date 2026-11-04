@@ -9,7 +9,7 @@ license="MIT"
 options="!check"
 builddir="$srcdir"
 install="$pkgname.post-install"
-depends="dnsmasq networkmanager 
+depends="dnsmasq networkmanager
 	networkmanager
 	networkmanager-cli
 	networkmanager-tui
@@ -86,12 +86,13 @@ source="
 	vince-audio.initd
 	vince-audio
 	vince-audio-diag
+	server.py
+	index.html
+	vince-webui.initd
 "
-
 build() {
 	:
 }
-
 package() {
 	for s in setup pulse bluetooth aria2 ariang ttyd ap hotspot led repeater sim; do
 		install -Dm755 "$srcdir"/vince-$s.initd "$pkgdir"/etc/init.d/vince-$s
@@ -102,37 +103,36 @@ package() {
 	install -Dm644 "$srcdir"/vince-unmanaged.conf "$pkgdir"/etc/NetworkManager/conf.d/vince-unmanaged.conf
 	install -Dm755 "$srcdir"/vince-hotspot "$pkgdir"/usr/libexec/vince-hotspot
 	install -Dm755 "$srcdir"/vince-diag "$pkgdir"/usr/bin/vince-diag
-install -Dm755 "$srcdir"/vince-sim "$pkgdir"/usr/libexec/vince-sim
-install -Dm755 "$srcdir"/vince-repeater "$pkgdir"/usr/libexec/vince-repeater
-install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
+	install -Dm755 "$srcdir"/vince-sim "$pkgdir"/usr/libexec/vince-sim
+	install -Dm755 "$srcdir"/vince-repeater "$pkgdir"/usr/libexec/vince-repeater
+	install -Dm755 "$srcdir"/vince-led "$pkgdir"/usr/libexec/vince-led
 	install -Dm755 "$srcdir"/vince-usb.initd "$pkgdir"/etc/init.d/vince-usb
 	install -Dm755 "$srcdir"/vince-usb "$pkgdir"/usr/libexec/vince-usb
 	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
 	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 	install -Dm755 "$srcdir"/vince-audio-diag "$pkgdir"/usr/bin/vince-audio-diag
-
+	# === WEB UI (FIXED): pasang server.py + index.html + init script ===
+	install -Dm755 "$srcdir"/server.py "$pkgdir"/var/www/localhost/htdocs/server.py
+	install -Dm644 "$srcdir"/index.html "$pkgdir"/var/www/localhost/htdocs/index.html
+	install -Dm755 "$srcdir"/vince-webui.initd "$pkgdir"/etc/init.d/vince-webui
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \
 			"$pkgdir"/etc/NetworkManager/system-connections/$c.nmconnection
 	done
-
 	install -Dm644 "$srcdir"/smb.conf "$pkgdir"/usr/share/vince/smb.conf
 	install -Dm644 "$srcdir"/pulse-system.pa "$pkgdir"/usr/share/vince/pulse-system.pa
 	install -Dm600 "$srcdir"/smb-pass "$pkgdir"/etc/vince/smb-pass
 	install -Dm600 "$srcdir"/aria2.conf "$pkgdir"/etc/vince/aria2.conf
 	install -Dm644 "$srcdir"/vince-pulse-bluetooth.conf \
 		"$pkgdir"/etc/dbus-1/system.d/vince-pulse-bluetooth.conf
-
 	mkdir -p "$pkgdir"/usr/share/vince
 	cp -r "$srcdir"/ariang "$pkgdir"/usr/share/vince/ariang
-
-
 	# layanan yang otomatis nyala saat boot
 	mkdir -p "$pkgdir"/etc/runlevels/default
-mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
+	mkdir -p "$pkgdir"/etc/runlevels/boot && ln -sf /etc/init.d/vince-led "$pkgdir"/etc/runlevels/boot/vince-led
 	for s in vince-setup vince-usb sshd dbus networkmanager modemmanager bluetooth \
 	         vince-pulse vince-audio vince-bluetooth samba vince-aria2 vince-ariang \
-	         vince-ttyd vince-ap vince-sim zram-init; do
+	         vince-ttyd vince-ap vince-sim vince-webui zram-init; do
 		ln -sf "/etc/init.d/$s" "$pkgdir/etc/runlevels/default/$s"
 	done
 }
