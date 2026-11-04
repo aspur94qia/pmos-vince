@@ -1,133 +1,22 @@
 #!/bin/sh
-export PULSE_SERVER=unix:/var/run/pulse/native
-LOG=/var/log/vince-audio.log
-EQ_SINK=vince_eq
-LADSPA=/usr/lib/ladspa/mbeq_1197.so
-# 15 band (dB): 50 100 156 220 311 440 622 880 1250 1750 2500 3500 5000 10000 20000 Hz
-EQ_SPEAKER="0,4,6,5,2,0,-1,0,1,2,3,5,6,5,2"
-EQ_HEADSET="3,4,3,1,0,-1,-1,0,1,1,2,3,4,3,1"
-EQ_MOD=""
-EQ_KIND=""
-LAST=""
+# Active Crossover Audio Routing (Dual Speaker Stereo Mod) MSM8953 (vince)
 
-log() { echo "$(date '+%H:%M:%S') $*" >> "$LOG"; }
-CARD="$(sed -n 's/^ *\([0-9][0-9]*\) \[.*/\1/p' /proc/asound/cards 2>/dev/null | head -n1)"
-CARD="${CARD:-0}"
-SPLIT_OK=""
-SPLIT_WARN=""
-has() { amixer -c "$CARD" cget "name='$1'" >/dev/null 2>&1; }
-set_ctl() { amixer -q -c "$CARD" cset "name='$1'" "$2" 2>>"$LOG"; }
-split_apply() {
-	[ "$1" = speaker ] || return 0
-	for c in 'RX1 MIX1 INP1' 'RDAC2 MUX' 'EAR_S' 'SPK DAC Switch' 'RX3 MIX1 INP1'; do
-		if ! has "$c"; then
-			[ -n "$SPLIT_WARN" ] || log "split dilewati: kontrol '$c' tidak ada"
-			SPLIT_WARN=1
-			return 0
-		fi
-	done
-	set_ctl 'RX1 MIX1 INP1' RX1
-	set_ctl 'RDAC2 MUX' RX1
-	set_ctl 'EAR_S' 1
-	set_ctl 'SPK DAC Switch' 1
-	set_ctl 'RX3 MIX1 INP1' RX2
-	has 'RX1 Digital Volume' && set_ctl 'RX1 Digital Volume' 128
-	has 'RX3 Digital Volume' && set_ctl 'RX3 Digital Volume' 128
-	[ -n "$SPLIT_OK" ] || log "split aktif: earpiece=kiri (RX1), speaker=kanan (RX2)"
-	SPLIT_OK=1
-}
+# 1. Reset Semua Sakelar Audio ALSA
+amixer -c 0 sset 'EAR PA' 'OFF' 2>/dev/null || true
+amixer -c 0 sset 'Ext Spk Switch' 'OFF' 2>/dev/null || true
 
-wait_pulse() {
-	i=0
-	until pactl info >/dev/null 2>&1; do
-		i=$((i + 1))
-		[ "$i" -gt 90 ] && return 1
-		sleep 1
-	done
-	return 0
-}
+# 2. Setup Kanal Kiri (Left) -> Earpiece (Khusus Treble Gemerincing & High Gain)
+amixer -c 0 sset 'RX INT1 DEM MUX' 'CLSH' 2>/dev/null || true
+amixer -c 0 sset 'RX INT1 MIX1 INP1' 'RX1' 2>/dev/null || true
+amixer -c 0 sset 'EAR PA' 'ON' 2>/dev/null || true
+amixer -c 0 sset 'RX1 Mix Digital Volume' 90% 2>/dev/null || true
 
-pick_port() {
-	pactl list sinks 2>/dev/null | awk '
-	function flush(   i, hp, sp) {
-		if (name ~ /^alsa_output/) {
-			for (i = 1; i <= n; i++) {
-				l = tolower(pn[i])
-				if (l ~ /headphone|headset|lineout/ && !na[i] && hp == "") hp = pn[i]
-				if (l ~ /speaker/ && sp == "") sp = pn[i]
-			}
-			if (hp != "") { print name "|" hp "|headset"; found = 1; exit }
-			if (sp != "") { print name "|" sp "|speaker"; found = 1; exit }
-		}
-	}
-	/^Sink #/ { if (insink) flush(); insink = 1; name = ""; n = 0; inports = 0; next }
-	insink && /^\tName: / { name = $2; next }
-	insink && /^\tPorts:/ { inports = 1; next }
-	insink && /^\tActive Port:/ { inports = 0; next }
-	insink && inports && /^\t\t[^\t]/ {
-		s = $0; sub(/^\t\t/, "", s)
-		p = s; sub(/: .*/, "", p)
-		n++; pn[n] = p; na[n] = (s ~ /not available\)/)
-		next
-	}
-	END { if (insink && !found) flush() }'
-}
+# 3. Setup Kanal Kanan (Right) -> Loudspeaker Utama (Full-Range: Bass + Treble)
+amixer -c 0 sset 'RX INT2 DEM MUX' 'CLSH' 2>/dev/null || true
+amixer -c 0 sset 'RX INT2 MIX1 INP1' 'RX2' 2>/dev/null || true
+amixer -c 0 sset 'Ext Spk Switch' 'ON' 2>/dev/null || true
+amixer -c 0 sset 'RX2 Mix Digital Volume' 80% 2>/dev/null || true
 
-eq_apply() {
-	if [ ! -e "$LADSPA" ]; then
-		pactl set-default-sink "$1" 2>/dev/null
-		return 0
-	fi
-	[ -n "$EQ_MOD" ] && [ "$EQ_KIND" = "$2" ] && return 0
-	curve="$EQ_SPEAKER"
-	[ "$2" = headset ] && curve="$EQ_HEADSET"
-	[ -n "$EQ_MOD" ] && pactl unload-module "$EQ_MOD" 2>/dev/null
-	EQ_MOD=""
-	if m="$(pactl load-module module-ladspa-sink sink_name="$EQ_SINK" master="$1" \
-		plugin=mbeq_1197 label=mbeq control="$curve" 2>>"$LOG")" && [ -n "$m" ]; then
-		EQ_MOD="$m"
-		EQ_KIND="$2"
-		pactl set-default-sink "$EQ_SINK" 2>/dev/null
-		pactl list short sink-inputs 2>/dev/null | while read -r id _rest; do
-			pactl move-sink-input "$id" "$EQ_SINK" 2>/dev/null
-		done
-		log "EQ $2 aktif"
-	else
-		log "EQ gagal dimuat, lanjut tanpa EQ"
-		pactl set-default-sink "$1" 2>/dev/null
-	fi
-}
-
-apply() {
-	sel="$(pick_port)"
-	[ -n "$sel" ] || return 0
-	[ "$sel" = "$LAST" ] && { split_apply "${sel##*|}"; return 0; }
-	sink="${sel%%|*}"
-	rest="${sel#*|}"
-	port="${rest%%|*}"
-	kind="${rest##*|}"
-	pactl set-sink-port "$sink" "$port" 2>>"$LOG"
-	pactl set-sink-mute "$sink" 0 2>/dev/null
-	pactl set-sink-volume "$sink" 100% 2>/dev/null
-	eq_apply "$sink" "$kind"
-	LAST="$sel"
-	split_apply "$kind"
-	log "output: $kind ($port) di $sink"
-}
-
-while true; do
-	wait_pulse || { sleep 5; continue; }
-	LAST=""
-	EQ_MOD=""
-	EQ_KIND=""
-	apply
-	pactl subscribe 2>/dev/null | while read -r ev; do
-		case "$ev" in
-		*" on sink "*|*" on card "*|*" on server "*)
-			sleep 1
-			apply
-			;;
-		esac
-	done
-	sleep 3
-done
+# 4. Set Output Primary PulseAudio ke Stereo Analog Bawaan
+pactl set-sink-volume alsa_output.platform-soc_sound.analog-stereo 85% 2>/dev/null || true
+pactl set-default-sink alsa_output.platform-soc_sound.analog-stereo 2>/dev/null || true
