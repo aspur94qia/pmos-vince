@@ -75,7 +75,15 @@ class RouterAPIHandler(http.server.SimpleHTTPRequestHandler):
                 "echo %s > /sys/class/leds/white:status/trigger 2>/dev/null || true" % data.get('trigger')),
             "/api/restart-samba": lambda: self.exec_cmd("rc-service samba restart"),
             "/api/reboot": lambda: self.exec_cmd("reboot"),
-            "/api/audio-preset": lambda: None,
+            "/api/eq": lambda: self.apply_eq(data.get('g')),
+            "/api/audio-preset": lambda: self.apply_eq({
+                "off":     [0, 0, 0, 0, 0],
+                "dynamic": [3, 2, 0, 2, 4],
+                "movie":   [5, 3, 0, 2, 3],
+                "music":   [2, 1, 0, 1, 2],
+                "game":    [4, 2, -1, 3, 4],
+                "bass":    [8, 6, 2, 0, 0],
+            }.get(data.get('preset'), [0,0,0,0,0])),
             "/api/adb-keys": lambda: None,
             "/api/imei-backup": lambda: None,
         }
@@ -89,6 +97,20 @@ class RouterAPIHandler(http.server.SimpleHTTPRequestHandler):
             self._json(500, {"status": "error", "error": str(e)})
             return
         self._json(200, {"status": "ok"})
+
+    def apply_eq(self, gains):
+        try:
+            g = [float(x) for x in (gains or [0,0,0,0,0])]
+            g += [0.0] * (5 - len(g))
+        except Exception:
+            g = [0.0, 0.0, 0.0, 0.0, 0.0]
+        m = [g[0],g[0], g[1],g[1],g[1],g[1], g[2],g[2],g[2],g[2], g[3],g[3],g[3], g[4],g[4]]
+        ctrl = ",".join("%.1f" % x for x in m)
+        master = "alsa_output.platform-soc_sound.analog-stereo"
+        self.exec_cmd("for i in $(pactl list short modules 2>/dev/null | awk '/ladspa-sink/{print $1}'); do pactl unload-module $i 2>/dev/null; done")
+        self.exec_cmd("pactl load-module module-ladspa-sink sink_name=eq master=%s plugin=mbeq_1197 label=mbeq control='%s'" % (master, ctrl))
+        self.exec_cmd("pactl set-default-sink eq 2>/dev/null || true")
+        self.exec_cmd("for i in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do pactl move-sink-input $i eq 2>/dev/null; done")
 
     def _json(self, code, obj):
         self.send_response(code)

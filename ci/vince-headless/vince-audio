@@ -20,3 +20,8 @@ amixer -c 0 sset 'RX2 Mix Digital Volume' 80% 2>/dev/null || true
 # 4. Set Output Primary PulseAudio ke Stereo Analog Bawaan
 pactl set-sink-volume alsa_output.platform-soc_sound.analog-stereo 85% 2>/dev/null || true
 pactl set-default-sink alsa_output.platform-soc_sound.analog-stereo 2>/dev/null || true
+
+# 5-Band Equalizer via PulseAudio LADSPA mbeq (dipadukan dari Web UI /api/eq)
+for i in $(pactl list short modules 2>/dev/null | awk '/ladspa-sink/{print $1}'); do pactl unload-module $i 2>/dev/null; done
+pactl load-module module-ladspa-sink sink_name=eq master=alsa_output.platform-soc_sound.analog-stereo plugin=mbeq_1197 label=mbeq control=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 2>/dev/null || true
+pactl set-default-sink eq 2>/dev/null || true

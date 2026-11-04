@@ -136,11 +136,11 @@
                         <div class="space-y-2">
                             <label class="block text-xs text-slate-400">Slider 5-Band Equalizer Gain (dB)</label>
                             <div class="grid grid-cols-5 gap-2 text-center text-[10px] text-slate-400">
-                                <div>60Hz<input type="range" min="-12" max="12" value="0" class="w-full accent-sky-500"></div>
-                                <div>230Hz<input type="range" min="-12" max="12" value="0" class="w-full accent-sky-500"></div>
-                                <div>910Hz<input type="range" min="-12" max="12" value="0" class="w-full accent-sky-500"></div>
-                                <div>3.6kHz<input type="range" min="-12" max="12" value="0" class="w-full accent-sky-500"></div>
-                                <div>14kHz<input type="range" min="-12" max="12" value="0" class="w-full accent-sky-500"></div>
+                                <div>60Hz<input type="range" id="eq0" min="-12" max="12" value="0" oninput="applyEq()" class="w-full accent-sky-500"></div>
+                                <div>230Hz<input type="range" id="eq1" min="-12" max="12" value="0" oninput="applyEq()" class="w-full accent-sky-500"></div>
+                                <div>910Hz<input type="range" id="eq2" min="-12" max="12" value="0" oninput="applyEq()" class="w-full accent-sky-500"></div>
+                                <div>3.6kHz<input type="range" id="eq3" min="-12" max="12" value="0" oninput="applyEq()" class="w-full accent-sky-500"></div>
+                                <div>14kHz<input type="range" id="eq4" min="-12" max="12" value="0" oninput="applyEq()" class="w-full accent-sky-500"></div>
                             </div>
                         </div>
                     </div>
@@ -230,7 +230,12 @@
             e.preventDefault();
             if (document.getElementById('username').value === 'admin' && document.getElementById('password').value === 'vince123') {
                 document.cookie = "session_uuid=" + crypto.randomUUID() + "; path=/; max-age=86400";
-                checkSession();
+                function applyEq() {
+            let g = [0,1,2,3,4].map(i => parseFloat(document.getElementById('eq'+i).value) || 0);
+            apiCall('/api/eq', {g: g});
+        }
+
+        checkSession();
             } else {
                 document.getElementById('login-error').classList.remove('hidden');
             }
