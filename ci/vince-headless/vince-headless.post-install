@@ -2,3 +2,5 @@
 addgroup pulse audio 2>/dev/null || true
 addgroup pulse bluetooth 2>/dev/null || true
 exit 0
+rc-update add vince-bluetooth default
+rc-update add vince-audio default
