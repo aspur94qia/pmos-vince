@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+
+name="vince-webui"
+description="pmos-vince Web UI Python API Server"
+
+command="/usr/bin/python3"
+command_args="/var/www/localhost/htdocs/server.py"
+command_background=true
+pidfile="/run/vince-webui.pid"
+
+depend() {
+    need net
+    after vince-ap
+}

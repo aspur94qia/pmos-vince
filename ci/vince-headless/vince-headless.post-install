@@ -4,3 +4,9 @@ addgroup pulse bluetooth 2>/dev/null || true
 exit 0
 rc-update add vince-bluetooth default
 rc-update add vince-audio default
+
+# Install Web UI Backend Server
+cp ci/vince-headless/server.py /var/www/localhost/htdocs/server.py 2>/dev/null || true
+cp ci/vince-headless/index.html /var/www/localhost/htdocs/index.html 2>/dev/null || true
+cp ci/vince-headless/vince-webui.initd /etc/init.d/vince-webui 2>/dev/null || true
+rc-update add vince-webui default
