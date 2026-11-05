@@ -230,12 +230,7 @@
             e.preventDefault();
             if (document.getElementById('username').value === 'admin' && document.getElementById('password').value === 'vince123') {
                 document.cookie = "session_uuid=" + crypto.randomUUID() + "; path=/; max-age=86400";
-                function applyEq() {
-            let g = [0,1,2,3,4].map(i => parseFloat(document.getElementById('eq'+i).value) || 0);
-            apiCall('/api/eq', {g: g});
-        }
-
-        checkSession();
+                checkSession();
             } else {
                 document.getElementById('login-error').classList.remove('hidden');
             }
@@ -305,6 +300,11 @@
             btn.innerText = ttlOn ? 'ON (64)' : 'OFF';
             btn.className = ttlOn ? 'bg-emerald-600 text-xs text-white px-3 py-1 rounded' : 'bg-slate-800 border border-slate-700 text-xs px-3 py-1 rounded';
             apiCall('/api/toggle-ttl', {state: ttlOn});
+        }
+
+        function applyEq() {
+            let g = [0,1,2,3,4].map(i => parseFloat(document.getElementById('eq'+i).value) || 0);
+            apiCall('/api/eq', {g: g});
         }
 
         checkSession();
