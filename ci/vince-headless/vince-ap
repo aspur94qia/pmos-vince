@@ -2,6 +2,7 @@
 # Hotspot WiFi: hostapd + dnsmasq + NAT, tanpa NetworkManager.
 # SSID dan password dibaca dari profil Hotspot.nmconnection. Log: /var/log/vince-ap.log
 LOG=/var/log/vince-ap.log
+rm -f /run/vince-ap.failed
 IF=wlan0
 ADDR=192.168.50.1
 NMC=/etc/NetworkManager/system-connections/Hotspot.nmconnection
@@ -30,11 +31,11 @@ psk="$(sed -n 's/^psk=//p' "$NMC" 2>/dev/null | head -n1)"
 [ -n "$ssid" ] || ssid="pmOS-Vince"
 if [ "${#psk}" -lt 8 ]; then
 	log "ERROR: password hotspot kosong atau kurang dari 8 karakter ($NMC)"
-	exit 1
+	touch /run/vince-ap.failed; exit 1
 fi
 
-command -v hostapd >/dev/null 2>&1 || { log "ERROR: hostapd tidak terpasang"; exit 1; }
-command -v dnsmasq >/dev/null 2>&1 || { log "ERROR: dnsmasq tidak terpasang"; exit 1; }
+command -v hostapd >/dev/null 2>&1 || { log "ERROR: hostapd tidak terpasang"; touch /run/vince-ap.failed; exit 1; }
+command -v dnsmasq >/dev/null 2>&1 || { log "ERROR: dnsmasq tidak terpasang"; touch /run/vince-ap.failed; exit 1; }
 
 i=0
 until [ -d "/sys/class/net/$IF" ]; do

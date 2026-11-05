@@ -76,6 +76,10 @@ class RouterAPIHandler(http.server.SimpleHTTPRequestHandler):
             "/api/restart-samba": lambda: self.exec_cmd("rc-service samba restart"),
             "/api/reboot": lambda: self.exec_cmd("reboot"),
             "/api/eq": lambda: self.apply_eq(data.get('g')),
+            "/api/apn": lambda: self.exec_cmd(
+                "printf '%s\\n\\n\\n' '%s' > /home/user/share/apn.txt" % (data.get('apn') or 'internet')),
+            "/api/lock-lte": lambda: self.exec_cmd(
+                "printf '%s' > /home/user/share/lock-lte.txt" % (data.get('mode') or 'auto')),
             "/api/audio-preset": lambda: self.apply_eq({
                 "off":     [0, 0, 0, 0, 0],
                 "dynamic": [3, 2, 0, 2, 4],

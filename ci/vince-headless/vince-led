@@ -100,6 +100,18 @@ off
 last=""
 while true; do
 	cap="$(batt_cap)"
+	up="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+	err=""
+	if [ "$up" -gt 120 ] && [ ! -d /sys/class/net/wlan0 ]; then
+		err=10; desc="ERROR: wlan0 tidak muncul (driver/firmware WiFi)"
+	elif [ "$up" -gt 180 ] && { [ -e /run/vince-ap.failed ] || { ! pidof hostapd >/dev/null 2>&1 && ! iw dev wlan0 info 2>/dev/null | grep -q "type AP"; }; }; then
+		err=5; desc="ERROR: hotspot (hostapd) gagal naik"
+	fi
+	if [ -n "$err" ]; then
+		flash "$err" 0.08 0.15; nap 1.5
+		[ "$desc" != "$last" ] && { log "$desc"; last="$desc"; }
+		continue
+	fi
 	if charging; then chg=1; else chg=0; fi
 
 	if [ "$chg" = 0 ] && [ "$cap" -lt 20 ]; then

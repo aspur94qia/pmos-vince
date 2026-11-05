@@ -61,12 +61,7 @@ iw dev wlan0 set power_save off 2>/dev/null
 	sed -i "s/^interface-name=.*/interface-name=$up_if/" "$UP"
 	einfo "Hotspot: $hs_if, Upstream: $up_if"
 
-	( for t in 1 2 3 4 5 6; do
-		sleep 20
-		[ -e /run/vince-repeater.active ] && exit 0
-		nmcli -t -f NAME connection show --active 2>/dev/null | grep -qi hotspot && exit 0
-		nmcli connection up Hotspot >/dev/null 2>&1
-	done ) >/dev/null 2>&1 </dev/null &
+	# (dihapus) loop nmcli connection up Hotspot — wlan0 unmanaged, hotspot pakai hostapd (vince-ap)
 }
 
 start() {

@@ -42,10 +42,16 @@ while true; do
 	sleep 30
 done
 log "modem ditemukan: id $M"
-lte_only() {
-	mmcli -m "$1" --set-allowed-modes='4g' >>"$LOG" 2>&1 && log "mode jaringan: 4G saja"
+apply_mode() {
+	mode="$(cat /home/user/share/lock-lte.txt 2>/dev/null | tr -d '\r' | head -n1)"
+	case "$mode" in
+		lte_only|4g|4g_only)
+			mmcli -m "$1" --set-allowed-modes='4g' >>"$LOG" 2>&1 && log "mode jaringan: 4G saja" ;;
+		*)
+			mmcli -m "$1" --set-allowed-modes='any' >>"$LOG" 2>&1 && log "mode jaringan: auto (2G/3G/4G)" ;;
+	esac
 }
-lte_only "$M"
+apply_mode "$M"
 
 LASTSUM=""; tries=0
 while true; do
@@ -57,6 +63,7 @@ while true; do
 	fi
 	M="$(modem_id)"
 	[ -n "$M" ] || { log "modem hilang"; sleep 30; continue; }
+	apply_mode "$M"
 
 	if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx AutoSIM; then
 		[ "$tries" != 0 ] && log "AutoSIM AKTIF: $(ip -br addr 2>/dev/null | grep -Ei 'wwan|rmnet|ppp|bam' | head -n1)"
