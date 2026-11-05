@@ -8,7 +8,7 @@ pidfile=/run/vince-ap.pid
 
 depend() {
 	need localmount
-	after vince-setup networkmanager
+	after vince-setup networkmanager nftables
 }
 
 stop_post() {

@@ -88,6 +88,7 @@ source="
 	vince-audio-diag
 	vince-webui.py
 	vince-webui.initd
+	vince-nftables.nft
 "
 build() {
 	:
@@ -111,6 +112,7 @@ package() {
 	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 	install -Dm755 "$srcdir"/vince-audio-diag "$pkgdir"/usr/bin/vince-audio-diag
 	install -Dm755 "$srcdir"/vince-webui.initd "$pkgdir"/etc/init.d/vince-webui
+	install -Dm644 "$srcdir"/vince-nftables.nft "$pkgdir"/etc/nftables.d/55_vince.nft
 	install -Dm755 "$srcdir"/vince-webui.py "$pkgdir"/usr/libexec/vince-webui
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \

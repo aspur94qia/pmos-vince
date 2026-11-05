@@ -4,6 +4,7 @@ description="Vince: firmware, TTL, interface WiFi (hotspot/repeater), Samba"
 
 depend() {
 	need localmount
+	after nftables
 	before networkmanager modemmanager bluetooth samba
 }
 

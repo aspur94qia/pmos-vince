@@ -1,0 +1,11 @@
+# Firewall bawaan postmarketOS membuang semua koneksi masuk kecuali SSH/DHCP/DNS.
+# Aturan ini membuka layanan vince HANYA untuk klien hotspot (wlan0/ap0), bukan dari data seluler.
+table inet filter {
+	chain input {
+		iifname { "wlan0", "ap0" } tcp dport { 80, 139, 445, 6800, 6801, 7681 } accept comment "vince: web UI, Samba, aria2, AriaNg, terminal"
+	}
+	chain forward {
+		iifname { "wlan0", "ap0" } accept comment "vince: klien hotspot ke internet"
+		oifname { "wlan0", "ap0" } ct state established,related accept comment "vince: balasan ke klien hotspot"
+	}
+}
