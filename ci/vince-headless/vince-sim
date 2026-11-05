@@ -1,10 +1,17 @@
 #!/bin/sh
-# Pantau jaringan SIM: catat diagnosis ke share, coba sambung ulang, APN manual dari apn.txt
-LOG=/home/user/share/vince-sim.log
-APNF=/home/user/share/apn.txt
+# Pantau SIM: data seluler otomatis hidup begitu SIM terpasang (4G saja secara bawaan).
+#  - APN otomatis dari provider-info; bila gagal dicoba tabel APN operator Indonesia
+#  - APN manual: /home/user/share/apn.txt (baris 1 APN, 2 user, 3 password; OTOMATIS = otomatis)
+#  - Mode jaringan: /etc/vince/netmode (bawaan 4g = LTE saja)
+#  - /etc/vince/data-off ada = data sengaja dimatikan lewat web UI
+SHARE="${VINCE_SHARE:-/home/user/share}"
+LOG="$SHARE/vince-sim.log"
+APNF="$SHARE/apn.txt"
+OFFF="${VINCE_DATAOFF:-/etc/vince/data-off}"
+MODEF="${VINCE_NETMODE:-/etc/vince/netmode}"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 
-mkdir -p /home/user/share
+mkdir -p "$SHARE"
 [ -e "$APNF" ] || printf '%s\n%s\n%s\n' "OTOMATIS" "" "" > "$APNF"
 touch "$LOG"
 [ "$(wc -c < "$LOG")" -gt 200000 ] && { tail -n 300 "$LOG" > "$LOG.tmp"; mv "$LOG.tmp" "$LOG"; }
@@ -13,19 +20,81 @@ chmod 600 "$APNF"
 
 modem_id() { mmcli -L 2>/dev/null | sed -n 's|.*/Modem/\([0-9]*\).*|\1|p' | head -n1; }
 kv() { mmcli -m "$1" -K 2>/dev/null | sed -n "s/^$2 *: *//p" | head -n1; }
+sum_apn() { cksum < "$APNF"; }
+off_state() { [ -e "$OFFF" ] && echo off || echo on; }
+active() { nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx AutoSIM; }
+
+# tabel APN cadangan: kode operator (MCC+MNC) -> "apn|user|password", satu baris per kandidat
+builtin_apn() {
+	case "$1" in
+		51010) printf '%s\n' "internet||" "telkomsel|wap|wap123" ;;
+		51001|51021) printf '%s\n' "internet||" "indosatgprs|indosat|indosat" ;;
+		51011|51008) printf '%s\n' "internet||" "www.xlgprs.net|xlgprs|proxl" ;;
+		51089) printf '%s\n' "3gprs|3gprs|3gprs" "internet||" ;;
+		51009|51028) printf '%s\n' "smartfren|smartfren|smartfren" "internet||" ;;
+		*) printf '%s\n' "internet||" ;;
+	esac
+}
+
+apn_mode_auto() {
+	A="$(sed -n 1p "$APNF" | tr -d '\r')"
+	case "$A" in ""|OTOMATIS*) return 0 ;; esac
+	return 1
+}
 
 apply_apn() {
 	A="$(sed -n 1p "$APNF" | tr -d '\r')"
 	U="$(sed -n 2p "$APNF" | tr -d '\r')"
 	P="$(sed -n 3p "$APNF" | tr -d '\r')"
-	case "$A" in
-		""|OTOMATIS*)
-			nmcli con modify AutoSIM gsm.auto-config yes gsm.apn "" gsm.username "" gsm.password "" >/dev/null 2>&1
-			log "APN: otomatis (provider-info)" ;;
-		*)
-			nmcli con modify AutoSIM gsm.auto-config no gsm.apn "$A" gsm.username "$U" gsm.password "$P" >/dev/null 2>&1
-			log "APN manual: $A" ;;
-	esac
+	if apn_mode_auto; then
+		nmcli con modify AutoSIM gsm.auto-config yes gsm.apn "" gsm.username "" gsm.password "" >/dev/null 2>&1
+		log "APN: otomatis (provider-info)"
+	else
+		nmcli con modify AutoSIM gsm.auto-config no gsm.apn "$A" gsm.username "$U" gsm.password "$P" >/dev/null 2>&1
+		log "APN manual: $A"
+	fi
+}
+
+connect() { nmcli -w 60 con up AutoSIM >>"$LOG" 2>&1; }
+
+try_builtin() { # $1 = kode operator
+	list="$(builtin_apn "$1")"
+	oldifs="$IFS"
+	IFS='
+'
+	for entry in $list; do
+		IFS="$oldifs"
+		a="${entry%%|*}"; rest="${entry#*|}"; u="${rest%%|*}"; p="${rest#*|}"
+		log "coba APN cadangan: $a (operator $1)"
+		nmcli con modify AutoSIM gsm.auto-config no gsm.apn "$a" gsm.username "$u" gsm.password "$p" >/dev/null 2>&1
+		nmcli con down AutoSIM >/dev/null 2>&1
+		if connect; then log "APN cadangan berhasil: $a"; return 0; fi
+		IFS='
+'
+	done
+	IFS="$oldifs"
+	return 1
+}
+
+LASTMODE=""; LASTM=""
+apply_mode() { # $1 = id modem
+	MODE="$(tr -d '\r\n' < "$MODEF" 2>/dev/null)"
+	case "$MODE" in 4g|3g|2g|"2g|3g|4g") ;; *) MODE=4g ;; esac
+	[ "$MODE" = "$LASTMODE" ] && [ "$1" = "$LASTM" ] && return 0
+	if mmcli -m "$1" --set-allowed-modes="$MODE" >>"$LOG" 2>&1; then
+		log "mode jaringan: $MODE"; LASTMODE="$MODE"; LASTM="$1"
+	else
+		log "gagal set mode jaringan $MODE (modem mungkin belum siap)"
+	fi
+}
+
+wait_s() { # tidur sambil memantau perubahan apn.txt / tombol data
+	w=0; s0="$(sum_apn)"; o0="$(off_state)"
+	while [ "$w" -lt "$1" ]; do
+		sleep 5; w=$((w + 5))
+		[ "$(sum_apn)" != "$s0" ] && return 0
+		[ "$(off_state)" != "$o0" ] && return 0
+	done
 }
 
 log "=== boot: menunggu modem ==="
@@ -42,44 +111,67 @@ while true; do
 	sleep 30
 done
 log "modem ditemukan: id $M"
-apply_mode() {
-	mode="$(cat /home/user/share/lock-lte.txt 2>/dev/null | tr -d '\r' | head -n1)"
-	case "$mode" in
-		lte_only|4g|4g_only)
-			mmcli -m "$1" --set-allowed-modes='4g' >>"$LOG" 2>&1 && log "mode jaringan: 4G saja" ;;
-		*)
-			mmcli -m "$1" --set-allowed-modes='any' >>"$LOG" 2>&1 && log "mode jaringan: auto (2G/3G/4G)" ;;
-	esac
-}
-apply_mode "$M"
 
-LASTSUM=""; tries=0
+LASTSUM=""; LASTSIM="?"; tries=0; nosim=0
 while true; do
-	SUM="$(cksum < "$APNF")"
+	SUM="$(sum_apn)"
 	if [ "$SUM" != "$LASTSUM" ]; then
 		apply_apn
-		LASTSUM="$SUM"
+		LASTSUM="$SUM"; tries=0
 		nmcli con down AutoSIM >/dev/null 2>&1
 	fi
 	M="$(modem_id)"
-	[ -n "$M" ] || { log "modem hilang"; sleep 30; continue; }
+	[ -n "$M" ] || { log "modem hilang"; wait_s 30; continue; }
+
+	SIM="$(kv "$M" modem.generic.sim)"
+	if [ "$SIM" != "$LASTSIM" ]; then
+		log "status SIM berubah: '${SIM:-tidak ada}'"
+		LASTSIM="$SIM"; tries=0; nosim=0; LASTM=""
+	fi
 	apply_mode "$M"
 
-	if nmcli -t -f NAME connection show --active 2>/dev/null | grep -qx AutoSIM; then
+	if [ "$(off_state)" = off ]; then
+		active && { nmcli con down AutoSIM >/dev/null 2>&1; log "data dimatikan lewat web UI"; }
+		wait_s 30
+		continue
+	fi
+
+	case "$SIM" in
+		""|--)
+			nosim=$((nosim + 1))
+			[ $((nosim % 3)) = 1 ] && {
+				log "SIM tidak terdeteksi, pilih slot ulang"
+				[ -x /etc/init.d/msm-modem-uim-selection ] && rc-service msm-modem-uim-selection restart >>"$LOG" 2>&1
+			}
+			wait_s 20
+			continue ;;
+	esac
+
+	if active; then
 		[ "$tries" != 0 ] && log "AutoSIM AKTIF: $(ip -br addr 2>/dev/null | grep -Ei 'wwan|rmnet|ppp|bam' | head -n1)"
 		tries=0
-	else
-		tries=$((tries + 1))
-		log "state=$(kv "$M" modem.generic.state) sim=$(kv "$M" modem.generic.sim) operator=$(kv "$M" modem.3gpp.operator-name) kode=$(kv "$M" modem.3gpp.operator-code) reg=$(kv "$M" modem.3gpp.registration-state) sinyal=$(kv "$M" modem.generic.signal-quality.value)"
-		case "$(kv "$M" modem.generic.sim)" in
-			""|--)
-				log "SIM tidak terdeteksi, pilih slot ulang"
-				[ -x /etc/init.d/msm-modem-uim-selection ] && rc-service msm-modem-uim-selection restart >>"$LOG" 2>&1 ;;
-		esac
-		if nmcli -w 60 con up AutoSIM >>"$LOG" 2>&1; then log "AutoSIM naik"; else log "AutoSIM gagal naik (percobaan $tries)"; fi
-		if [ "$tries" = 2 ]; then
-			{ echo "--- mmcli ---"; mmcli -m "$M"; echo "--- nmcli device ---"; nmcli device; } >> "$LOG" 2>&1
-		fi
+		wait_s 60
+		continue
 	fi
-	sleep 60
+
+	tries=$((tries + 1))
+	CODE="$(kv "$M" modem.3gpp.operator-code)"
+	log "state=$(kv "$M" modem.generic.state) sim=$SIM operator=$(kv "$M" modem.3gpp.operator-name) kode=$CODE reg=$(kv "$M" modem.3gpp.registration-state) sinyal=$(kv "$M" modem.generic.signal-quality.value)"
+	step=$(( (tries - 1) % 8 + 1 ))
+	if [ "$step" = 2 ] && apn_mode_auto; then
+		apply_apn
+		nmcli con down AutoSIM >/dev/null 2>&1
+	fi
+	if [ "$step" = 3 ] && apn_mode_auto && [ -n "$CODE" ]; then
+		if try_builtin "$CODE"; then tries=0; wait_s 60; continue; fi
+		apply_apn
+	elif connect; then
+		log "AutoSIM naik"
+	else
+		log "AutoSIM gagal naik (percobaan $tries)"
+	fi
+	if [ "$tries" = 2 ]; then
+		{ echo "--- mmcli ---"; mmcli -m "$M"; echo "--- nmcli device ---"; nmcli device; } >> "$LOG" 2>&1
+	fi
+	wait_s 20
 done

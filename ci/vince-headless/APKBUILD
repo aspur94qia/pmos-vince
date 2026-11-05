@@ -2,7 +2,7 @@
 pkgname=vince-headless
 pkgver=2.0
 pkgrel=0
-pkgdesc="Headless server vince: BT receiver, hotspot/repeater, Samba, aria2, ttyd, Cockpit"
+pkgdesc="Headless server vince: BT receiver, hotspot/repeater, Samba, aria2, ttyd, Web UI"
 url="https://postmarketos.org"
 arch="noarch"
 license="MIT"
@@ -86,8 +86,7 @@ source="
 	vince-audio.initd
 	vince-audio
 	vince-audio-diag
-	server.py
-	index.html
+	vince-webui.py
 	vince-webui.initd
 "
 build() {
@@ -111,10 +110,8 @@ package() {
 	install -Dm755 "$srcdir"/vince-audio.initd "$pkgdir"/etc/init.d/vince-audio
 	install -Dm755 "$srcdir"/vince-audio "$pkgdir"/usr/libexec/vince-audio
 	install -Dm755 "$srcdir"/vince-audio-diag "$pkgdir"/usr/bin/vince-audio-diag
-	# === WEB UI (FIXED): pasang server.py + index.html + init script ===
-	install -Dm755 "$srcdir"/server.py "$pkgdir"/var/www/localhost/htdocs/server.py
-	install -Dm644 "$srcdir"/index.html "$pkgdir"/var/www/localhost/htdocs/index.html
 	install -Dm755 "$srcdir"/vince-webui.initd "$pkgdir"/etc/init.d/vince-webui
+	install -Dm755 "$srcdir"/vince-webui.py "$pkgdir"/usr/libexec/vince-webui
 	for c in AutoSIM Hotspot Upstream; do
 		install -Dm600 "$srcdir"/$c.nmconnection \
 			"$pkgdir"/etc/NetworkManager/system-connections/$c.nmconnection

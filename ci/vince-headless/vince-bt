@@ -14,7 +14,10 @@ from gi.repository import GLib
 BLUEZ = "org.bluez"
 AGENT_PATH = "/vince/agent"
 ADAPTER = "/org/bluez/hci0"
-NAME = "Vince Speaker"
+try:
+    NAME = open("/etc/vince/bt-name").read().strip()[:32] or "Vince Speaker"
+except OSError:
+    NAME = "Vince Speaker"
 
 dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 bus = dbus.SystemBus()

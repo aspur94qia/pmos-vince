@@ -60,11 +60,11 @@ for p in $(awk '/^depends="/{f=1;next} f&&/^"/{exit} f{print $1}' "$DEST/APKBUIL
     sed -i "/^[[:space:]]*$p\$/d" "$DEST/APKBUILD"
   fi
 done
-pmbootstrap checksum vince-headless
-pmbootstrap -y build vince-headless
+pmbootstrap -t 3600 --details-to-stdout checksum vince-headless
+pmbootstrap -t 3600 --details-to-stdout -y build vince-headless
 
 for i in 1 2 3; do
-  if pmbootstrap -y install --password "$PW" --add vince-headless; then
+  if pmbootstrap -t 3600 --details-to-stdout -y install --password "$PW" --add vince-headless; then
     break
   fi
   [ "$i" = 3 ] && { echo "install gagal 3 kali" >&2; exit 1; }
@@ -75,7 +75,7 @@ for i in 1 2 3; do
 done
 
 rm -rf /tmp/pmos-export
-pmbootstrap -y export /tmp/pmos-export
+pmbootstrap -t 3600 -y export /tmp/pmos-export
 
 mkdir -p output
 sudo cp -rL /tmp/pmos-export/* output/

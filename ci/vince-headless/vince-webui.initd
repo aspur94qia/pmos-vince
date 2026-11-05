@@ -1,14 +1,16 @@
 #!/sbin/openrc-run
 
-name="vince-webui"
-description="pmos-vince Web UI Python API Server"
+description="Web UI pmOS Vince (port 80)"
 
-command="/usr/bin/python3"
-command_args="/var/www/localhost/htdocs/server.py"
+command=/usr/bin/python3
+command_args="/usr/libexec/vince-webui"
 command_background=true
-pidfile="/run/vince-webui.pid"
+pidfile=/run/vince-webui.pid
+output_log=/var/log/vince-webui.log
+error_log=/var/log/vince-webui.log
 
 depend() {
-    need net
-    after vince-ap
+	need localmount
+	use net
+	after vince-setup networkmanager
 }

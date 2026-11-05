@@ -1,17 +1,19 @@
 #!/sbin/openrc-run
 
-description="Routing audio: speaker/headset otomatis + EQ"
-
-command=/usr/libexec/vince-audio
-command_background=true
-pidfile=/run/vince-audio.pid
+description="Routing audio: earpiece + speaker + EQ"
 
 depend() {
 	need vince-pulse
 	after vince-bluetooth
 }
 
-stop_post() {
-	pkill -f "pactl subscribe" 2>/dev/null
+start() {
+	ebegin "Menyiapkan jalur audio vince"
+	/usr/libexec/vince-audio start >/dev/null 2>&1
+	eend 0
+}
+
+stop() {
+	/usr/libexec/vince-audio stop >/dev/null 2>&1
 	return 0
 }
