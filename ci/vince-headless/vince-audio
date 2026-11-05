@@ -1,27 +1,78 @@
 #!/bin/sh
-# Active Crossover Audio Routing (Dual Speaker Stereo Mod) MSM8953 (vince)
+# vince-audio Redmi 5 Plus (vince) headless — dual earpiece + loudspeaker + log diagnosa
+LOG=/var/log/vince-audio.log
 
-# 1. Reset Semua Sakelar Audio ALSA
-amixer -c 0 sset 'EAR PA' 'OFF' 2>/dev/null || true
-amixer -c 0 sset 'Ext Spk Switch' 'OFF' 2>/dev/null || true
+start() {
+    mkdir -p /var/log
+    exec >"$LOG" 2>&1
+    set -x
 
-# 2. Setup Kanal Kiri (Left) -> Earpiece (Khusus Treble Gemerincing & High Gain)
-amixer -c 0 sset 'RX INT1 DEM MUX' 'CLSH' 2>/dev/null || true
-amixer -c 0 sset 'RX INT1 MIX1 INP1' 'RX1' 2>/dev/null || true
-amixer -c 0 sset 'EAR PA' 'ON' 2>/dev/null || true
-amixer -c 0 sset 'RX1 Mix Digital Volume' 90% 2>/dev/null || true
+    echo "===== vince-audio START ====="
 
-# 3. Setup Kanal Kanan (Right) -> Loudspeaker Utama (Full-Range: Bass + Treble)
-amixer -c 0 sset 'RX INT2 DEM MUX' 'CLSH' 2>/dev/null || true
-amixer -c 0 sset 'RX INT2 MIX1 INP1' 'RX2' 2>/dev/null || true
-amixer -c 0 sset 'Ext Spk Switch' 'ON' 2>/dev/null || true
-amixer -c 0 sset 'RX2 Mix Digital Volume' 80% 2>/dev/null || true
+    # Tunggu kartu suara siap
+    i=0
+    until [ -e /dev/snd/controlC0 ]; do
+        i=$((i+1))
+        [ "$i" -gt 30 ] && break
+        sleep 1
+    done
+    echo "Kartu suara: $(ls /dev/snd/ | tr '\n' ' ')"
 
-# 4. Set Output Primary PulseAudio ke Stereo Analog Bawaan
-pactl set-sink-volume alsa_output.platform-soc_sound.analog-stereo 85% 2>/dev/null || true
-pactl set-default-sink alsa_output.platform-soc_sound.analog-stereo 2>/dev/null || true
+    # Dump kontrol mixer untuk diagnosa
+    amixer -c 0 scontrols || true
+    amixer -c 0 contents || true
 
-# 5-Band Equalizer via PulseAudio LADSPA mbeq (dipadukan dari Web UI /api/eq)
-for i in $(pactl list short modules 2>/dev/null | awk '/ladspa-sink/{print $1}'); do pactl unload-module $i 2>/dev/null; done
-pactl load-module module-ladspa-sink sink_name=eq master=alsa_output.platform-soc_sound.analog-stereo plugin=mbeq_1197 label=mbeq control=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 2>/dev/null || true
-pactl set-default-sink eq 2>/dev/null || true
+    # Reset jalur
+    amixer -c 0 sset "EAR PA" OFF 2>/dev/null || true
+    amixer -c 0 sset "Ext Spk Switch" OFF 2>/dev/null || true
+    amixer -c 0 sset "Speaker" OFF 2>/dev/null || true
+
+    # Earpiece (kiri)
+    amixer -c 0 sset "RX INT1 DEM MUX" CLSH 2>/dev/null || true
+    amixer -c 0 sset "RX INT1 MIX1 INP1" RX1 2>/dev/null || true
+    amixer -c 0 sset "EAR PA" ON 2>/dev/null || true
+    amixer -c 0 sset "RX1 Mix Digital Volume" 90% 2>/dev/null || true
+
+    # Loudspeaker (kanan)
+    amixer -c 0 sset "RX INT2 DEM MUX" CLSH 2>/dev/null || true
+    amixer -c 0 sset "RX INT2 MIX1 INP1" RX2 2>/dev/null || true
+    amixer -c 0 sset "Ext Spk Switch" ON 2>/dev/null || amixer -c 0 sset "Speaker" ON 2>/dev/null || true
+    amixer -c 0 sset "RX2 Mix Digital Volume" 80% 2>/dev/null || true
+
+    amixer -c 0 sset Master 100% unmute 2>/dev/null || true
+
+    # Tunggu sink PulseAudio
+    SINK="alsa_output.platform-soc_sound.analog-stereo"
+    i=0
+    until pactl list short sinks 2>/dev/null | grep -q "$SINK"; do
+        i=$((i+1))
+        [ "$i" -gt 25 ] && break
+        sleep 1
+    done
+
+    pactl set-sink-volume "$SINK" 85% 2>/dev/null || true
+    pactl set-sink-mute "$SINK" 0 2>/dev/null || true
+    pactl set-default-sink "$SINK" 2>/dev/null || true
+
+    # EQ global LADSPA mbeq
+    for m in $(pactl list short modules 2>/dev/null | awk '/ladspa-sink/{print $1}'); do
+        pactl unload-module "$m" 2>/dev/null
+    done
+    pactl load-module module-ladspa-sink sink_name=eq master="$SINK" plugin=mbeq_1197 label=mbeq control=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 2>/dev/null && {
+        pactl set-default-sink eq 2>/dev/null || true
+        echo "EQ LADSPA berhasil dimuat"
+    } || echo "WARNING: EQ LADSPA gagal (cek swh-plugins)"
+
+    echo "===== vince-audio DONE ====="
+}
+
+stop() {
+    pactl list short modules 2>/dev/null | awk '/ladspa-sink/{print $1}' | xargs -I{} pactl unload-module {} 2>/dev/null || true
+}
+
+case "$1" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; start ;;
+    *) echo "Usage: $0 {start|stop|restart}" ;;
+esac
